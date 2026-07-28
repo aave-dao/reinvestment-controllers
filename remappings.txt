@@ -1,3 +1,4 @@
 forge-std/=lib/forge-std/src/
 @openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
 @circle-gateway/=lib/evm-gateway-contracts/
+lib/evm-gateway-contracts/:src/=lib/evm-gateway-contracts/src/

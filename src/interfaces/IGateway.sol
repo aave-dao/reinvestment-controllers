@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-BUSL
-pragma solidity 0.8.28;
+pragma solidity 0.8.30;
 
 interface IGateway {
     /// @notice Deposit tokens after approving this contract for the token

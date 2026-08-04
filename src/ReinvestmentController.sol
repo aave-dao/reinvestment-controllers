@@ -4,6 +4,7 @@ pragma solidity 0.8.30;
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
@@ -17,7 +18,11 @@ import {IGateway} from "./interfaces/IGateway.sol";
 import {IHub} from "./interfaces/IHub.sol";
 import {IReinvestmentController} from "./interfaces/IReinvestmentController.sol";
 
-contract ReinvestmentController is IReinvestmentController, AccessControl {
+contract ReinvestmentController is
+    IReinvestmentController,
+    Initializable,
+    AccessControl
+{
     using SafeERC20 for IERC20;
     using TransferSpecLib for bytes29;
 
@@ -30,8 +35,8 @@ contract ReinvestmentController is IReinvestmentController, AccessControl {
     /// @dev Maximum value of BPS representing 100%
     uint256 private constant MAX_BPS = 10_000;
 
-    /// @dev Seconds until on-chain withdrawal can be finalized
-    uint256 private constant SEVEN_DAYS_IN_BLOCKS = 7 days;
+    /// @dev Number of blocks until on-chain withdrawal can be finalized
+    uint256 private constant SEVEN_DAYS_IN_BLOCKS = 50_400;
 
     /// @inheritdoc IReinvestmentController
     IHub public immutable HUB;
@@ -57,33 +62,26 @@ contract ReinvestmentController is IReinvestmentController, AccessControl {
     /// @dev Buffer of uninvested funds on Hub (in BPS)
     uint256 private _bufferBps;
 
-    /// @dev Maximum amount of Hub funds that can be reinvested (in absolute terms)
-    uint256 private _maxDeploy;
+    /// @dev Maximum amount of Hub funds that can be invested (in absolute terms)
+    uint256 private _maxInvest;
 
-    /// @dev Maximum amount of Hub funds that can be reinvested (in BPS)
-    uint256 private _maxDeployBps;
+    /// @dev Maximum amount of Hub funds that can be invested (in BPS)
+    uint256 private _maxInvestBps;
 
     /// @dev Pending amount to be withdrawn on-chain
     uint256 private _pendingWithdrawalAmount;
 
-    /// @dev Timestamp when pending withdrawal can be finalized
+    /// @dev Block number when pending withdrawal can be finalized
     uint256 private _readyAtBlock;
 
-    constructor(
-        address admin,
-        address hub,
-        address gateway,
-        address usdc,
-        uint256 depositTimelock_,
-        uint256 maxDeploy_,
-        uint256 maxDeployBps_,
-        uint256 bufferBps_
-    ) {
+    /// @dev Sets the immutable protocol addresses and locks the implementation. The
+    /// resulting contract is inert until {initialize} is called on a proxy in front of it.
+    /// @param hub The address of the Hub
+    /// @param gateway The address of the Circle USDC Gateway
+    /// @param usdc The address of the USDC token
+    constructor(address hub, address gateway, address usdc) {
         require(
-            admin != address(0) &&
-                hub != address(0) &&
-                gateway != address(0) &&
-                usdc != address(0),
+            hub != address(0) && gateway != address(0) && usdc != address(0),
             InvalidZeroAddress()
         );
 
@@ -92,13 +90,26 @@ contract ReinvestmentController is IReinvestmentController, AccessControl {
         USDC = IERC20(usdc);
         ASSET_ID = IHub(hub).getAssetId(usdc);
 
+        _disableInitializers();
+    }
+
+    /// @inheritdoc IReinvestmentController
+    function initialize(
+        address admin,
+        uint256 depositTimelock_,
+        uint256 maxInvest_,
+        uint256 maxInvestBps_,
+        uint256 bufferBps_
+    ) external initializer {
+        require(admin != address(0), InvalidZeroAddress());
+
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(INVESTOR_ROLE, admin);
 
         _setDepositTimelock(depositTimelock_);
         _setGatewayTxLimit(10_000_000e6);
-        _setMaxDeploy(maxDeploy_);
-        _setMaxDeployBps(maxDeployBps_);
+        _setMaxInvest(maxInvest_);
+        _setMaxInvestBps(maxInvestBps_);
         _setBufferBps(bufferBps_);
     }
 
@@ -109,7 +120,10 @@ contract ReinvestmentController is IReinvestmentController, AccessControl {
             DepositTimelock()
         );
         require(amount > 0, InvalidAmount());
-        require(amount <= _getMaxDeploy(), MaximumDeployAmountExceeded());
+        require(
+            amount <= _getInvestableAmount(),
+            MaximumInvestAmountExceeded()
+        );
 
         _depositLastUpdate = block.timestamp;
 
@@ -173,9 +187,9 @@ contract ReinvestmentController is IReinvestmentController, AccessControl {
 
     /// @inheritdoc IReinvestmentController
     function setDepositTimelock(
-        uint256 depositTimelock
+        uint256 depositTimelock_
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        _setDepositTimelock(depositTimelock);
+        _setDepositTimelock(depositTimelock_);
     }
 
     /// @inheritdoc IReinvestmentController
@@ -193,27 +207,32 @@ contract ReinvestmentController is IReinvestmentController, AccessControl {
     }
 
     /// @inheritdoc IReinvestmentController
-    function setMaxDeploy(
-        uint256 maxDeploy_
+    function setMaxInvest(
+        uint256 maxAmount
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        _setMaxDeploy(maxDeploy_);
+        _setMaxInvest(maxAmount);
     }
 
     /// @inheritdoc IReinvestmentController
-    function setMaxDeployBps(
-        uint256 maxDeployBps_
+    function setMaxInvestBps(
+        uint256 maxBps
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        _setMaxDeployBps(maxDeployBps_);
+        _setMaxInvestBps(maxBps);
     }
 
     /// @inheritdoc IReinvestmentController
-    function getDeployableAmount() external view returns (uint256) {
-        return _getMaxDeploy();
+    function getInvestableAmount() external view returns (uint256) {
+        return _getInvestableAmount();
     }
 
     /// @inheritdoc IReinvestmentController
-    function getReinvestedAmount() external view returns (uint256) {
+    function getInvestedAmount() external view returns (uint256) {
         return HUB.getAssetSwept(ASSET_ID);
+    }
+
+    /// @inheritdoc IReinvestmentController
+    function depositTimelock() external view returns (uint256) {
+        return _depositTimelock;
     }
 
     /// @inheritdoc IReinvestmentController
@@ -222,13 +241,13 @@ contract ReinvestmentController is IReinvestmentController, AccessControl {
     }
 
     /// @inheritdoc IReinvestmentController
-    function maxDeploy() external view returns (uint256) {
-        return _maxDeploy;
+    function maxInvest() external view returns (uint256) {
+        return _maxInvest;
     }
 
     /// @inheritdoc IReinvestmentController
-    function maxDeployBps() external view returns (uint256) {
-        return _maxDeployBps;
+    function maxInvestBps() external view returns (uint256) {
+        return _maxInvestBps;
     }
 
     function bufferBps() external view returns (uint256) {
@@ -269,40 +288,21 @@ contract ReinvestmentController is IReinvestmentController, AccessControl {
     }
 
     /// @dev Sets a new deposit timelock (in seconds)
-    /// @param depositTimelock The new deposit timelock amount (in seconds)
-    function _setDepositTimelock(uint256 depositTimelock) internal {
-        require(depositTimelock > 0, InvalidAmount());
+    /// @param depositTimelock_ The new deposit timelock amount (in seconds)
+    function _setDepositTimelock(uint256 depositTimelock_) internal {
+        require(depositTimelock_ > 0, InvalidAmount());
 
         uint256 oldDepositTimelock = _depositTimelock;
-        _depositTimelock = depositTimelock;
-        emit SetDepositTimelock(oldDepositTimelock, depositTimelock);
+        _depositTimelock = depositTimelock_;
+        emit SetDepositTimelock(oldDepositTimelock, depositTimelock_);
     }
 
-    /// @dev Sets the Cricle Gateway's transaction limit
+    /// @dev Sets the Circle Gateway's transaction limit
     /// @param limit The new transaction limit
     function _setGatewayTxLimit(uint256 limit) internal {
         uint256 oldLimit = _gatewayTxLimit;
         _gatewayTxLimit = limit;
         emit SetGatewayTxLimit(oldLimit, limit);
-    }
-
-    /// @dev Sets the maximum amount of invesetable
-    /// Can be set to 0 to sunset ReinvestmentController
-    /// @param maxAmount The new maximum amount (in absolute terms)
-    function _setMaxDeploy(uint256 maxAmount) internal {
-        uint256 oldMaxDeploy = _maxDeploy;
-        _maxDeploy = maxAmount;
-        emit SetMaxDeploy(oldMaxDeploy, maxAmount);
-    }
-
-    /// @dev Sets the maximum amount that can be reinvested (in BPS)
-    /// @dev maxBps New maximum amount (in BPS)
-    function _setMaxDeployBps(uint256 maxBps) internal {
-        require(maxBps > 0 && maxBps < MAX_BPS, InvalidAmount());
-
-        uint256 oldMaxDeployBps = _maxDeployBps;
-        _maxDeployBps = maxBps;
-        emit SetMaxDeployBps(oldMaxDeployBps, maxBps);
     }
 
     /// @dev Sets the minimum amount of buffer that must be left on the Hub uninvested (in BPS)
@@ -315,8 +315,27 @@ contract ReinvestmentController is IReinvestmentController, AccessControl {
         emit SetBufferBps(oldBufferBps, buffer);
     }
 
-    /// @dev Calculates the maximum amount available to reinvest
-    function _getMaxDeploy() internal view returns (uint256) {
+    /// @dev Sets the maximum amount that can be invested (in absolute terms)
+    /// Can be set to 0 to sunset ReinvestmentController
+    /// @param maxAmount The new maximum amount (in absolute terms)
+    function _setMaxInvest(uint256 maxAmount) internal {
+        uint256 oldMaxInvest = _maxInvest;
+        _maxInvest = maxAmount;
+        emit SetMaxInvest(oldMaxInvest, maxAmount);
+    }
+
+    /// @dev Sets the maximum amount that can be invested (in BPS)
+    /// @dev maxBps New maximum amount (in BPS)
+    function _setMaxInvestBps(uint256 maxBps) internal {
+        require(maxBps > 0 && maxBps < MAX_BPS, InvalidAmount());
+
+        uint256 oldMaxInvestBps = _maxInvestBps;
+        _maxInvestBps = maxBps;
+        emit SetMaxInvestBps(oldMaxInvestBps, maxBps);
+    }
+
+    /// @dev Calculates the amount currently available to invest
+    function _getInvestableAmount() internal view returns (uint256) {
         uint256 supplied = HUB.getAddedAssets(ASSET_ID);
         uint256 idle = HUB.getAssetLiquidity(ASSET_ID);
         uint256 swept = HUB.getAssetSwept(ASSET_ID);
@@ -326,8 +345,8 @@ contract ReinvestmentController is IReinvestmentController, AccessControl {
 
         uint256 freeIdle = idle - buffer;
         uint256 capLimit = Math.min(
-            _maxDeploy,
-            (supplied * _maxDeployBps) / MAX_BPS
+            _maxInvest,
+            (supplied * _maxInvestBps) / MAX_BPS
         );
         uint256 capRoom = capLimit > swept ? capLimit - swept : 0;
 

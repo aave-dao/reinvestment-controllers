@@ -175,13 +175,13 @@ interface IReinvestmentController {
     /// @return The bytes4 magic value (0x1626ba7e)
     function ERC1271_MAGIC_VALUE() external view returns (bytes4);
 
-    /// @notice Returns the address of the Hub
-    /// @return The address of the Hub
-    function HUB() external view returns (IHub);
-
     /// @notice Returns the address of the Circle USDC Gateway
     /// @return The address of the Gateway
     function GATEWAY() external view returns (IGateway);
+
+    /// @notice Returns the address of the Hub
+    /// @return The address of the Hub
+    function HUB() external view returns (IHub);
 
     /// @notice Returns the address of the USDC token
     /// @return The address of USDC

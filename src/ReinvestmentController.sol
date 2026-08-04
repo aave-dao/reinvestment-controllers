@@ -37,12 +37,11 @@ contract ReinvestmentController is
 
     /// @dev Number of blocks until on-chain withdrawal can be finalized
     uint256 private constant SEVEN_DAYS_IN_BLOCKS = 50_400;
+    /// @inheritdoc IReinvestmentController
+    IGateway public immutable GATEWAY;
 
     /// @inheritdoc IReinvestmentController
     IHub public immutable HUB;
-
-    /// @inheritdoc IReinvestmentController
-    IGateway public immutable GATEWAY;
 
     /// @inheritdoc IReinvestmentController
     IERC20 public immutable USDC;
@@ -76,17 +75,17 @@ contract ReinvestmentController is
 
     /// @dev Sets the immutable protocol addresses and locks the implementation. The
     /// resulting contract is inert until {initialize} is called on a proxy in front of it.
-    /// @param hub The address of the Hub
     /// @param gateway The address of the Circle USDC Gateway
+    /// @param hub The address of the Hub
     /// @param usdc The address of the USDC token
-    constructor(address hub, address gateway, address usdc) {
+    constructor(address gateway, address hub, address usdc) {
         require(
-            hub != address(0) && gateway != address(0) && usdc != address(0),
+            gateway != address(0) && hub != address(0) && usdc != address(0),
             InvalidZeroAddress()
         );
 
-        HUB = IHub(hub);
         GATEWAY = IGateway(gateway);
+        HUB = IHub(hub);
         USDC = IERC20(usdc);
         ASSET_ID = IHub(hub).getAssetId(usdc);
 

@@ -24,6 +24,6 @@ contract WithdrawTest is ReinvestmentControllerTest {}
 
 contract SetGatewayTxLimitTest is ReinvestmentControllerTest {}
 
-contract DeployableTest is ReinvestmentControllerTest {}
+contract InvestableTest is ReinvestmentControllerTest {}
 
 contract IsValidSignatureTest is ReinvestmentControllerTest {}

@@ -289,7 +289,9 @@ contract DivestTest is ReinvestmentControllerTest {
                 version: TRANSFER_SPEC_VERSION,
                 sourceDomain: 0,
                 destinationDomain: 0,
-                sourceContract: AddressLib._addressToBytes32(address(gatewayWallet)),
+                sourceContract: AddressLib._addressToBytes32(
+                    address(gatewayWallet)
+                ),
                 destinationContract: AddressLib._addressToBytes32(
                     address(gatewayWallet)
                 ),

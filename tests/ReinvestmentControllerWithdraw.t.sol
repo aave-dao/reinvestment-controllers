@@ -70,7 +70,10 @@ contract InitiateWithdrawalTest is ReinvestmentControllerTest {
         assertEq(controller.readyAtBlock(), expectedReadyAtBlock);
 
         assertEq(
-            gatewayWallet.withdrawingBalance(address(usdc), address(controller)),
+            gatewayWallet.withdrawingBalance(
+                address(usdc),
+                address(controller)
+            ),
             WITHDRAW_AMOUNT
         );
         assertEq(
@@ -176,7 +179,10 @@ contract WithdrawTest is ReinvestmentControllerTest {
             SUPPLIED - INVESTABLE + WITHDRAW_AMOUNT
         );
         assertEq(
-            gatewayWallet.withdrawingBalance(address(usdc), address(controller)),
+            gatewayWallet.withdrawingBalance(
+                address(usdc),
+                address(controller)
+            ),
             0
         );
     }

@@ -8,7 +8,8 @@ import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transpa
 
 import {ReinvestmentController, IReinvestmentController} from "../src/ReinvestmentController.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
-import {MockGateway} from "./mocks/MockGateway.sol";
+import {MockGatewayMinter} from "./mocks/MockGatewayMinter.sol";
+import {MockGatewayWallet} from "./mocks/MockGatewayWallet.sol";
 import {MockHub} from "./mocks/MockHub.sol";
 
 contract ReinvestmentControllerTest is Test {
@@ -30,7 +31,8 @@ contract ReinvestmentControllerTest is Test {
     TransparentUpgradeableProxy public proxy;
 
     MockERC20 public usdc;
-    MockGateway public gateway;
+    MockGatewayWallet public gatewayWallet;
+    MockGatewayMinter public gatewayMinter;
     MockHub public hub;
 
     address public admin = makeAddr("admin");
@@ -38,13 +40,15 @@ contract ReinvestmentControllerTest is Test {
 
     function setUp() public virtual {
         usdc = new MockERC20("USD Coin", "USDC", 6);
-        gateway = new MockGateway();
+        gatewayWallet = new MockGatewayWallet();
+        gatewayMinter = new MockGatewayMinter();
         hub = new MockHub();
 
         hub.listAsset(address(usdc), ASSET_ID);
 
         implementation = new ReinvestmentController(
-            address(gateway),
+            address(gatewayWallet),
+            address(gatewayMinter),
             address(hub),
             address(usdc)
         );
@@ -85,6 +89,6 @@ contract ReinvestmentControllerTest is Test {
         vm.prank(admin);
         controller.invest(amount);
 
-        gateway.setNextMint(address(usdc), amount);
+        gatewayMinter.setNextMint(address(usdc), amount);
     }
 }

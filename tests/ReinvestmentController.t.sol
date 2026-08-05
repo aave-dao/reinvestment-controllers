@@ -164,7 +164,100 @@ contract ConstructorTest is Test {
     }
 }
 
-contract InitializeTest is ReinvestmentControllerTest {}
+contract InitializeTest is ReinvestmentControllerTest {
+    function test_initialize_revertsWith_alreadyInitialized() public {
+        vm.expectRevert(Initializable.InvalidInitialization.selector);
+        controller.initialize(
+            admin,
+            DEPOSIT_TIMELOCK,
+            MAX_INVEST,
+            MAX_INVEST_BPS,
+            BUFFER_BPS
+        );
+    }
+
+    function test_initialize_revertsWith_adminIsZeroAddress() public {
+        vm.expectRevert(IReinvestmentController.InvalidZeroAddress.selector);
+        _initProxy(
+            address(0),
+            DEPOSIT_TIMELOCK,
+            MAX_INVEST,
+            MAX_INVEST_BPS,
+            BUFFER_BPS
+        );
+    }
+
+    function test_initialize_revertsWith_depositTimelockIsZero() public {
+        vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
+        _initProxy(admin, 0, MAX_INVEST, MAX_INVEST_BPS, BUFFER_BPS);
+    }
+
+    function test_initialize_revertsWith_maxInvestBpsIsZero() public {
+        vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
+        _initProxy(admin, DEPOSIT_TIMELOCK, MAX_INVEST, 0, BUFFER_BPS);
+    }
+
+    function test_initialize_revertsWith_maxInvestBpsAtMaxBps() public {
+        vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
+        _initProxy(admin, DEPOSIT_TIMELOCK, MAX_INVEST, 10_000, BUFFER_BPS);
+    }
+
+    function test_initialize_revertsWith_bufferBpsIsZero() public {
+        vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
+        _initProxy(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, 0);
+    }
+
+    function test_initialize_revertsWith_bufferBpsAtMaxBps() public {
+        vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
+        _initProxy(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, 10_000);
+    }
+
+    function test_initialize_successful() public {
+        ReinvestmentController newController = _initProxy(
+            admin,
+            DEPOSIT_TIMELOCK,
+            MAX_INVEST,
+            MAX_INVEST_BPS,
+            BUFFER_BPS
+        );
+
+        assertTrue(
+            newController.hasRole(newController.DEFAULT_ADMIN_ROLE(), admin)
+        );
+        assertTrue(newController.hasRole(newController.INVESTOR_ROLE(), admin));
+
+        assertEq(newController.depositTimelock(), DEPOSIT_TIMELOCK);
+        assertEq(newController.gatewayTxLimit(), 10_000_000e6);
+        assertEq(newController.maxInvest(), MAX_INVEST);
+        assertEq(newController.maxInvestBps(), MAX_INVEST_BPS);
+        assertEq(newController.bufferBps(), BUFFER_BPS);
+    }
+
+    function _initProxy(
+        address admin_,
+        uint256 depositTimelock_,
+        uint256 maxInvest_,
+        uint256 maxInvestBps_,
+        uint256 bufferBps_
+    ) internal returns (ReinvestmentController) {
+        TransparentUpgradeableProxy newProxy = new TransparentUpgradeableProxy(
+            address(implementation),
+            proxyAdminOwner,
+            abi.encodeCall(
+                ReinvestmentController.initialize,
+                (
+                    admin_,
+                    depositTimelock_,
+                    maxInvest_,
+                    maxInvestBps_,
+                    bufferBps_
+                )
+            )
+        );
+
+        return ReinvestmentController(address(newProxy));
+    }
+}
 
 contract InvestTest is ReinvestmentControllerTest {
     function test_invest_revertsWith_callerIsNotInvestorBeforeAmountCheck()
@@ -177,12 +270,6 @@ contract InvestTest is ReinvestmentControllerTest {
                 controller.INVESTOR_ROLE()
             )
         );
-        controller.invest(0);
-    }
-
-    function test_invest_revertsWith_invalidAmount() public {
-        vm.prank(admin);
-        vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
         controller.invest(0);
     }
 
@@ -213,6 +300,12 @@ contract InvestTest is ReinvestmentControllerTest {
         vm.prank(admin);
         vm.expectRevert(IReinvestmentController.DepositTimelock.selector);
         controller.invest(1_000e6);
+    }
+
+    function test_invest_revertsWith_invalidAmount() public {
+        vm.prank(admin);
+        vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
+        controller.invest(0);
     }
 
     function test_invest_revertsWith_amountExceedsInvestable() public {
@@ -246,6 +339,26 @@ contract InvestTest is ReinvestmentControllerTest {
         controller.invest(1);
     }
 
+    function test_invest_partialAmountLeavesRemainingHeadroom() public {
+        uint256 amount = 100_000e6;
+        _invest(amount);
+
+        assertEq(controller.getInvestedAmount(), amount);
+        assertEq(controller.getInvestableAmount(), INVESTABLE - amount);
+    }
+
+    function test_invest_succeedsAgainAfterTimelockElapses() public {
+        uint256 amount = 100_000e6;
+        _invest(amount);
+
+        vm.warp(block.timestamp + DEPOSIT_TIMELOCK + 1);
+
+        vm.prank(admin);
+        controller.invest(amount);
+
+        assertEq(controller.getInvestedAmount(), amount * 2);
+    }
+
     function test_invest_successful() public {
         vm.expectEmit(address(controller));
         emit IReinvestmentController.Invested(INVESTABLE);
@@ -267,26 +380,6 @@ contract InvestTest is ReinvestmentControllerTest {
 
         assertEq(controller.getInvestableAmount(), 0);
     }
-
-    function test_invest_partialAmountLeavesRemainingHeadroom() public {
-        uint256 amount = 100_000e6;
-        _invest(amount);
-
-        assertEq(controller.getInvestedAmount(), amount);
-        assertEq(controller.getInvestableAmount(), INVESTABLE - amount);
-    }
-
-    function test_invest_succeedsAgainAfterTimelockElapses() public {
-        uint256 amount = 100_000e6;
-        _invest(amount);
-
-        vm.warp(block.timestamp + DEPOSIT_TIMELOCK + 1);
-
-        vm.prank(admin);
-        controller.invest(amount);
-
-        assertEq(controller.getInvestedAmount(), amount * 2);
-    }
 }
 
 contract DivestTest is ReinvestmentControllerTest {}
@@ -295,15 +388,185 @@ contract InitiateWithdrawalTest is ReinvestmentControllerTest {}
 
 contract WithdrawTest is ReinvestmentControllerTest {}
 
-contract SetDepositTimelockTest is ReinvestmentControllerTest {}
+contract SetDepositTimelockTest is ReinvestmentControllerTest {
+    uint256 public constant NEW_DEPOSIT_TIMELOCK = 2 days;
 
-contract SetGatewayTxLimitTest is ReinvestmentControllerTest {}
+    function test_setDepositTimelock_revertsWith_callerIsNotAdmin() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                address(this),
+                controller.DEFAULT_ADMIN_ROLE()
+            )
+        );
+        controller.setDepositTimelock(NEW_DEPOSIT_TIMELOCK);
+    }
 
-contract SetBufferBpsTest is ReinvestmentControllerTest {}
+    function test_setDepositTimelock_revertsWith_timelockIsZero() public {
+        vm.prank(admin);
+        vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
+        controller.setDepositTimelock(0);
+    }
 
-contract SetMaxInvestTest is ReinvestmentControllerTest {}
+    function test_setDepositTimelock_successful() public {
+        vm.expectEmit(address(controller));
+        emit IReinvestmentController.SetDepositTimelock(
+            DEPOSIT_TIMELOCK,
+            NEW_DEPOSIT_TIMELOCK
+        );
 
-contract SetMaxInvestBpsTest is ReinvestmentControllerTest {}
+        vm.prank(admin);
+        controller.setDepositTimelock(NEW_DEPOSIT_TIMELOCK);
+
+        assertEq(controller.depositTimelock(), NEW_DEPOSIT_TIMELOCK);
+    }
+}
+
+contract SetGatewayTxLimitTest is ReinvestmentControllerTest {
+    uint256 public constant DEFAULT_GATEWAY_TX_LIMIT = 10_000_000e6;
+    uint256 public constant NEW_GATEWAY_TX_LIMIT = 5_000_000e6;
+
+    function test_setGatewayTxLimit_revertsWith_callerIsNotAdmin() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                address(this),
+                controller.DEFAULT_ADMIN_ROLE()
+            )
+        );
+        controller.setGatewayTxLimit(NEW_GATEWAY_TX_LIMIT);
+    }
+
+    function test_setGatewayTxLimit_allowsZero() public {
+        vm.prank(admin);
+        controller.setGatewayTxLimit(0);
+
+        assertEq(controller.gatewayTxLimit(), 0);
+    }
+
+    function test_setGatewayTxLimit_successful() public {
+        vm.expectEmit(address(controller));
+        emit IReinvestmentController.SetGatewayTxLimit(
+            DEFAULT_GATEWAY_TX_LIMIT,
+            NEW_GATEWAY_TX_LIMIT
+        );
+
+        vm.prank(admin);
+        controller.setGatewayTxLimit(NEW_GATEWAY_TX_LIMIT);
+
+        assertEq(controller.gatewayTxLimit(), NEW_GATEWAY_TX_LIMIT);
+    }
+}
+
+contract SetBufferBpsTest is ReinvestmentControllerTest {
+    uint256 public constant NEW_BUFFER_BPS = 2_000;
+
+    function test_setBufferBps_revertsWith_callerIsNotAdmin() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                address(this),
+                controller.DEFAULT_ADMIN_ROLE()
+            )
+        );
+        controller.setBufferBps(NEW_BUFFER_BPS);
+    }
+
+    function test_setBufferBps_revertsWith_bufferIsZero() public {
+        vm.prank(admin);
+        vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
+        controller.setBufferBps(0);
+    }
+
+    function test_setBufferBps_revertsWith_bufferAtMaxBps() public {
+        vm.prank(admin);
+        vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
+        controller.setBufferBps(10_000);
+    }
+
+    function test_setBufferBps_successful() public {
+        vm.expectEmit(address(controller));
+        emit IReinvestmentController.SetBufferBps(BUFFER_BPS, NEW_BUFFER_BPS);
+
+        vm.prank(admin);
+        controller.setBufferBps(NEW_BUFFER_BPS);
+
+        assertEq(controller.bufferBps(), NEW_BUFFER_BPS);
+    }
+}
+
+contract SetMaxInvestTest is ReinvestmentControllerTest {
+    uint256 public constant NEW_MAX_INVEST = 50_000_000e6;
+
+    function test_setMaxInvest_revertsWith_callerIsNotAdmin() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                address(this),
+                controller.DEFAULT_ADMIN_ROLE()
+            )
+        );
+        controller.setMaxInvest(NEW_MAX_INVEST);
+    }
+
+    function test_setMaxInvest_allowsZeroToSunset() public {
+        vm.prank(admin);
+        controller.setMaxInvest(0);
+
+        assertEq(controller.maxInvest(), 0);
+        assertEq(controller.getInvestableAmount(), 0);
+    }
+
+    function test_setMaxInvest_successful() public {
+        vm.expectEmit(address(controller));
+        emit IReinvestmentController.SetMaxInvest(MAX_INVEST, NEW_MAX_INVEST);
+
+        vm.prank(admin);
+        controller.setMaxInvest(NEW_MAX_INVEST);
+
+        assertEq(controller.maxInvest(), NEW_MAX_INVEST);
+    }
+}
+
+contract SetMaxInvestBpsTest is ReinvestmentControllerTest {
+    uint256 public constant NEW_MAX_INVEST_BPS = 5_000;
+
+    function test_setMaxInvestBps_revertsWith_callerIsNotAdmin() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                address(this),
+                controller.DEFAULT_ADMIN_ROLE()
+            )
+        );
+        controller.setMaxInvestBps(NEW_MAX_INVEST_BPS);
+    }
+
+    function test_setMaxInvestBps_revertsWith_bpsIsZero() public {
+        vm.prank(admin);
+        vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
+        controller.setMaxInvestBps(0);
+    }
+
+    function test_setMaxInvestBps_revertsWith_bpsAtMaxBps() public {
+        vm.prank(admin);
+        vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
+        controller.setMaxInvestBps(10_000);
+    }
+
+    function test_setMaxInvestBps_successful() public {
+        vm.expectEmit(address(controller));
+        emit IReinvestmentController.SetMaxInvestBps(
+            MAX_INVEST_BPS,
+            NEW_MAX_INVEST_BPS
+        );
+
+        vm.prank(admin);
+        controller.setMaxInvestBps(NEW_MAX_INVEST_BPS);
+
+        assertEq(controller.maxInvestBps(), NEW_MAX_INVEST_BPS);
+    }
+}
 
 contract GetInvestableAmountTest is ReinvestmentControllerTest {}
 

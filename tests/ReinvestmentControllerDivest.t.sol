@@ -65,6 +65,30 @@ contract DivestTest is ReinvestmentControllerTest {
         controller.divest(amount, _attestation(amount), "");
     }
 
+    function test_divest_revertsWith_liquidityQueuedForWithdrawal() public {
+        _invest(INVESTABLE);
+
+        vm.prank(admin);
+        controller.initiateWithdrawal(DIVEST_AMOUNT);
+
+        uint256 amount = INVESTABLE - DIVEST_AMOUNT + 1;
+
+        vm.prank(admin);
+        vm.expectRevert(IReinvestmentController.InsufficientLiquidity.selector);
+        controller.divest(amount, _attestation(amount), "");
+    }
+
+    function test_divest_revertsWith_allLiquidityQueuedForWithdrawal() public {
+        _invest(INVESTABLE);
+
+        vm.prank(admin);
+        controller.initiateWithdrawal(INVESTABLE);
+
+        vm.prank(admin);
+        vm.expectRevert(IReinvestmentController.InsufficientLiquidity.selector);
+        controller.divest(1, _attestation(1), "");
+    }
+
     function test_divest_revertsWith_crossChainTransferNotAllowed() public {
         _invest(INVESTABLE);
 
@@ -172,7 +196,7 @@ contract DivestTest is ReinvestmentControllerTest {
             (DIVEST_AMOUNT * 3) / 4
         );
 
-        gateway.setNextMint(address(usdc), DIVEST_AMOUNT);
+        gatewayMinter.setNextMint(address(usdc), DIVEST_AMOUNT);
 
         vm.prank(admin);
         controller.divest(DIVEST_AMOUNT, payload, "");
@@ -186,7 +210,7 @@ contract DivestTest is ReinvestmentControllerTest {
         vm.prank(admin);
         controller.setGatewayTxLimit(DIVEST_AMOUNT);
 
-        gateway.setNextMint(address(usdc), DIVEST_AMOUNT);
+        gatewayMinter.setNextMint(address(usdc), DIVEST_AMOUNT);
 
         vm.prank(admin);
         controller.divest(DIVEST_AMOUNT, _attestation(DIVEST_AMOUNT), "");
@@ -194,23 +218,39 @@ contract DivestTest is ReinvestmentControllerTest {
         assertEq(controller.getInvestedAmount(), INVESTABLE - DIVEST_AMOUNT);
     }
 
+    function test_divest_upToBalanceNotQueuedForWithdrawal() public {
+        _invest(INVESTABLE);
+
+        vm.prank(admin);
+        controller.initiateWithdrawal(DIVEST_AMOUNT);
+
+        uint256 amount = INVESTABLE - DIVEST_AMOUNT;
+        gatewayMinter.setNextMint(address(usdc), amount);
+
+        vm.prank(admin);
+        controller.divest(amount, _attestation(amount), "");
+
+        assertEq(controller.getInvestedAmount(), DIVEST_AMOUNT);
+        assertEq(controller.pendingWithdrawalAmount(), DIVEST_AMOUNT);
+    }
+
     function test_divest_fullSweptAmount() public {
         _invest(INVESTABLE);
 
-        gateway.setNextMint(address(usdc), INVESTABLE);
+        gatewayMinter.setNextMint(address(usdc), INVESTABLE);
 
         vm.prank(admin);
         controller.divest(INVESTABLE, _attestation(INVESTABLE), "");
 
         assertEq(controller.getInvestedAmount(), 0);
         assertEq(usdc.balanceOf(address(hub)), SUPPLIED);
-        assertEq(usdc.balanceOf(address(gateway)), 0);
+        assertEq(usdc.balanceOf(address(gatewayWallet)), INVESTABLE);
     }
 
     function test_divest_successful() public {
         _invest(INVESTABLE);
 
-        gateway.setNextMint(address(usdc), DIVEST_AMOUNT);
+        gatewayMinter.setNextMint(address(usdc), DIVEST_AMOUNT);
 
         vm.expectEmit(address(controller));
         emit IReinvestmentController.Divested(DIVEST_AMOUNT);
@@ -222,7 +262,6 @@ contract DivestTest is ReinvestmentControllerTest {
             usdc.balanceOf(address(hub)),
             SUPPLIED - INVESTABLE + DIVEST_AMOUNT
         );
-        assertEq(usdc.balanceOf(address(gateway)), INVESTABLE - DIVEST_AMOUNT);
         assertEq(usdc.balanceOf(address(controller)), 0);
 
         assertEq(controller.getInvestedAmount(), INVESTABLE - DIVEST_AMOUNT);
@@ -230,9 +269,13 @@ contract DivestTest is ReinvestmentControllerTest {
             hub.getAssetLiquidity(ASSET_ID),
             SUPPLIED - INVESTABLE + DIVEST_AMOUNT
         );
+
+        // The minter mints; only Circle's out-of-band gatewayBurn debits the wallet, and
+        // the controller never triggers it
+        assertEq(usdc.balanceOf(address(gatewayWallet)), INVESTABLE);
         assertEq(
-            gateway.balanceOf(address(controller), address(usdc)),
-            INVESTABLE - DIVEST_AMOUNT
+            gatewayWallet.availableBalance(address(usdc), address(controller)),
+            INVESTABLE
         );
     }
 
@@ -246,9 +289,9 @@ contract DivestTest is ReinvestmentControllerTest {
                 version: TRANSFER_SPEC_VERSION,
                 sourceDomain: 0,
                 destinationDomain: 0,
-                sourceContract: AddressLib._addressToBytes32(address(gateway)),
+                sourceContract: AddressLib._addressToBytes32(address(gatewayWallet)),
                 destinationContract: AddressLib._addressToBytes32(
-                    address(gateway)
+                    address(gatewayWallet)
                 ),
                 sourceToken: AddressLib._addressToBytes32(address(usdc)),
                 destinationToken: AddressLib._addressToBytes32(address(usdc)),

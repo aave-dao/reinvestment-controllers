@@ -8,7 +8,8 @@ import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transpa
 
 import {ReinvestmentController, IReinvestmentController} from "../src/ReinvestmentController.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
-import {MockGateway} from "./mocks/MockGateway.sol";
+import {MockGatewayMinter} from "./mocks/MockGatewayMinter.sol";
+import {MockGatewayWallet} from "./mocks/MockGatewayWallet.sol";
 import {MockHub} from "./mocks/MockHub.sol";
 
 import {ReinvestmentControllerTest} from "./ReinvestmentControllerBase.t.sol";
@@ -16,38 +17,72 @@ import {ReinvestmentControllerTest} from "./ReinvestmentControllerBase.t.sol";
 contract ConstructorTest is Test {
     uint256 public constant ASSET_ID = 1;
 
-    function test_constructor_revertsWith_gatewayIsZeroAddress() public {
+    function test_constructor_revertsWith_gatewayWalletIsZeroAddress() public {
         MockERC20 usdc = new MockERC20("USD Coin", "USDC", 6);
+        MockGatewayMinter gatewayMinter = new MockGatewayMinter();
         MockHub hub = new MockHub();
 
         vm.expectRevert(IReinvestmentController.InvalidZeroAddress.selector);
-        new ReinvestmentController(address(0), address(hub), address(usdc));
+        new ReinvestmentController(
+            address(0),
+            address(gatewayMinter),
+            address(hub),
+            address(usdc)
+        );
+    }
+
+    function test_constructor_revertsWith_gatewayMinterIsZeroAddress() public {
+        MockERC20 usdc = new MockERC20("USD Coin", "USDC", 6);
+        MockGatewayWallet gatewayWallet = new MockGatewayWallet();
+        MockHub hub = new MockHub();
+
+        vm.expectRevert(IReinvestmentController.InvalidZeroAddress.selector);
+        new ReinvestmentController(
+            address(gatewayWallet),
+            address(0),
+            address(hub),
+            address(usdc)
+        );
     }
 
     function test_constructor_revertsWith_hubIsZeroAddress() public {
         MockERC20 usdc = new MockERC20("USD Coin", "USDC", 6);
-        MockGateway gateway = new MockGateway();
+        MockGatewayWallet gatewayWallet = new MockGatewayWallet();
+        MockGatewayMinter gatewayMinter = new MockGatewayMinter();
 
         vm.expectRevert(IReinvestmentController.InvalidZeroAddress.selector);
-        new ReinvestmentController(address(gateway), address(0), address(usdc));
+        new ReinvestmentController(
+            address(gatewayWallet),
+            address(gatewayMinter),
+            address(0),
+            address(usdc)
+        );
     }
 
     function test_constructor_revertsWith_usdcIsZeroAddress() public {
-        MockGateway gateway = new MockGateway();
+        MockGatewayWallet gatewayWallet = new MockGatewayWallet();
+        MockGatewayMinter gatewayMinter = new MockGatewayMinter();
         MockHub hub = new MockHub();
 
         vm.expectRevert(IReinvestmentController.InvalidZeroAddress.selector);
-        new ReinvestmentController(address(gateway), address(hub), address(0));
+        new ReinvestmentController(
+            address(gatewayWallet),
+            address(gatewayMinter),
+            address(hub),
+            address(0)
+        );
     }
 
     function test_constructor_revertsWith_assetNotListedOnHub() public {
         MockERC20 usdc = new MockERC20("USD Coin", "USDC", 6);
-        MockGateway gateway = new MockGateway();
+        MockGatewayWallet gatewayWallet = new MockGatewayWallet();
+        MockGatewayMinter gatewayMinter = new MockGatewayMinter();
         MockHub hub = new MockHub();
 
         vm.expectRevert(MockHub.AssetNotListed.selector);
         new ReinvestmentController(
-            address(gateway),
+            address(gatewayWallet),
+            address(gatewayMinter),
             address(hub),
             address(usdc)
         );
@@ -55,12 +90,14 @@ contract ConstructorTest is Test {
 
     function test_constructor_locksImplementation() public {
         MockERC20 usdc = new MockERC20("USD Coin", "USDC", 6);
-        MockGateway gateway = new MockGateway();
+        MockGatewayWallet gatewayWallet = new MockGatewayWallet();
+        MockGatewayMinter gatewayMinter = new MockGatewayMinter();
         MockHub hub = new MockHub();
         hub.listAsset(address(usdc), ASSET_ID);
 
         ReinvestmentController controller = new ReinvestmentController(
-            address(gateway),
+            address(gatewayWallet),
+            address(gatewayMinter),
             address(hub),
             address(usdc)
         );
@@ -71,17 +108,20 @@ contract ConstructorTest is Test {
 
     function test_constructor_successful() public {
         MockERC20 usdc = new MockERC20("USD Coin", "USDC", 6);
-        MockGateway gateway = new MockGateway();
+        MockGatewayWallet gatewayWallet = new MockGatewayWallet();
+        MockGatewayMinter gatewayMinter = new MockGatewayMinter();
         MockHub hub = new MockHub();
         hub.listAsset(address(usdc), ASSET_ID);
 
         ReinvestmentController controller = new ReinvestmentController(
-            address(gateway),
+            address(gatewayWallet),
+            address(gatewayMinter),
             address(hub),
             address(usdc)
         );
 
-        assertEq(address(controller.GATEWAY()), address(gateway));
+        assertEq(address(controller.GATEWAY_WALLET()), address(gatewayWallet));
+        assertEq(address(controller.GATEWAY_MINTER()), address(gatewayMinter));
         assertEq(address(controller.HUB()), address(hub));
         assertEq(address(controller.USDC()), address(usdc));
         assertEq(controller.ASSET_ID(), ASSET_ID);

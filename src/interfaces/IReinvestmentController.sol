@@ -2,7 +2,8 @@
 pragma solidity 0.8.30;
 
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
-import {IGateway} from "./IGateway.sol";
+import {IGatewayMinter} from "./IGatewayMinter.sol";
+import {IGatewayWallet} from "./IGatewayWallet.sol";
 import {IHub} from "./IHub.sol";
 
 interface IReinvestmentController {
@@ -107,7 +108,8 @@ interface IReinvestmentController {
 
     /// @notice Initializes the controller's roles and investment limits
     /// @dev Callable once, on a proxy. The implementation itself is locked at construction,
-    /// and the protocol addresses (HUB, GATEWAY, USDC, ASSET_ID) are fixed there rather than
+    /// and the protocol addresses (GATEWAY_WALLET, GATEWAY_MINTER, HUB, USDC, ASSET_ID) are
+    /// fixed there rather than
     /// here, so changing one requires deploying a new implementation and upgrading to it.
     /// @param admin The address granted both DEFAULT_ADMIN_ROLE and INVESTOR_ROLE
     /// @param depositTimelock_ The initial deposit timelock (in seconds)
@@ -175,9 +177,15 @@ interface IReinvestmentController {
     /// @return The bytes4 magic value (0x1626ba7e)
     function ERC1271_MAGIC_VALUE() external view returns (bytes4);
 
-    /// @notice Returns the address of the Circle USDC Gateway
-    /// @return The address of the Gateway
-    function GATEWAY() external view returns (IGateway);
+    /// @notice Returns the address of the Circle Gateway wallet, which holds deposits and
+    /// serves the on-chain withdrawal path
+    /// @return The address of the Gateway wallet
+    function GATEWAY_WALLET() external view returns (IGatewayWallet);
+
+    /// @notice Returns the address of the Circle Gateway minter, which mints against
+    /// signed attestations
+    /// @return The address of the Gateway minter
+    function GATEWAY_MINTER() external view returns (IGatewayMinter);
 
     /// @notice Returns the address of the Hub
     /// @return The address of the Hub

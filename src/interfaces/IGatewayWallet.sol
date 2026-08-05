@@ -1,20 +1,15 @@
 // SPDX-License-Identifier: LicenseRef-BUSL
 pragma solidity 0.8.30;
 
-interface IGateway {
+/// @notice The deposit side of Circle's Gateway, deployed as `GatewayWallet`
+/// @dev Holds deposited balances and owns the on-chain withdrawal path. Minting is a
+/// separate contract at a separate address; see {IGatewayMinter}.
+interface IGatewayWallet {
     /// @notice Deposit tokens after approving this contract for the token
     /// @dev The resulting balance in this contract belongs to `msg.sender`
     /// @param token The token to deposit
     /// @param value The amount to be deposited
     function deposit(address token, uint256 value) external;
-
-    /// @notice Mint funds via a signed attestation
-    /// @param attestationPayload The byte-encoded attestation(s)
-    /// @param signature The signature from a valid attestation signer on `attestationPayload`
-    function gatewayMint(
-        bytes memory attestationPayload,
-        bytes memory signature
-    ) external;
 
     /// Starts the withdrawal process. After `withdrawalDelay` blocks, `withdraw` may be called to complete the
     /// withdrawal. Once a withdrawal has been initiated, that amount can no longer be used. Repeated calls will add to
@@ -32,6 +27,9 @@ interface IGateway {
     /// @param token   The token to withdraw
     function withdraw(address token) external;
 
+    /// @dev Burn intents are signed against the wallet's domain, so this is the separator
+    /// the controller must reproduce when validating an ERC-1271 signature. The minter
+    /// exposes its own separator bound to a different verifying contract.
     /// @return The EIP-712 domain separator used for signing burn intent payloads
     function domainSeparator() external view returns (bytes32);
 }

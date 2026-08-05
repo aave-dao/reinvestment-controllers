@@ -111,7 +111,7 @@ contract InvestTest is ReinvestmentControllerTest {
         emit IReinvestmentController.Invested(INVESTABLE);
         _invest(INVESTABLE);
 
-        assertEq(usdc.balanceOf(address(gateway)), INVESTABLE);
+        assertEq(usdc.balanceOf(address(gatewayWallet)), INVESTABLE);
         assertEq(usdc.balanceOf(address(hub)), SUPPLIED - INVESTABLE);
         assertEq(usdc.balanceOf(address(controller)), 0);
 
@@ -119,9 +119,9 @@ contract InvestTest is ReinvestmentControllerTest {
         assertEq(hub.getAssetLiquidity(ASSET_ID), SUPPLIED - INVESTABLE);
         assertEq(hub.getAddedAssets(ASSET_ID), SUPPLIED);
 
-        assertEq(usdc.allowance(address(controller), address(gateway)), 0);
+        assertEq(usdc.allowance(address(controller), address(gatewayWallet)), 0);
         assertEq(
-            gateway.balanceOf(address(controller), address(usdc)),
+            gatewayWallet.availableBalance(address(usdc), address(controller)),
             INVESTABLE
         );
 

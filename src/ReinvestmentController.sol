@@ -14,7 +14,8 @@ import {TransferSpecLib} from "@circle-gateway/src/lib/TransferSpecLib.sol";
 import {AddressLib} from "@circle-gateway/src/lib/AddressLib.sol";
 import {Cursor} from "@circle-gateway/src/lib/Cursor.sol";
 
-import {IGateway} from "./interfaces/IGateway.sol";
+import {IGatewayMinter} from "./interfaces/IGatewayMinter.sol";
+import {IGatewayWallet} from "./interfaces/IGatewayWallet.sol";
 import {IHub} from "./interfaces/IHub.sol";
 import {IReinvestmentController} from "./interfaces/IReinvestmentController.sol";
 
@@ -38,7 +39,10 @@ contract ReinvestmentController is
     /// @dev Number of blocks until on-chain withdrawal can be finalized
     uint256 private constant SEVEN_DAYS_IN_BLOCKS = 50_400;
     /// @inheritdoc IReinvestmentController
-    IGateway public immutable GATEWAY;
+    IGatewayWallet public immutable GATEWAY_WALLET;
+
+    /// @inheritdoc IReinvestmentController
+    IGatewayMinter public immutable GATEWAY_MINTER;
 
     /// @inheritdoc IReinvestmentController
     IHub public immutable HUB;
@@ -75,16 +79,26 @@ contract ReinvestmentController is
 
     /// @dev Sets the immutable protocol addresses and locks the implementation. The
     /// resulting contract is inert until {initialize} is called on a proxy in front of it.
-    /// @param gateway The address of the Circle USDC Gateway
+    /// @param gatewayWallet The address of the Circle Gateway wallet
+    /// @param gatewayMinter The address of the Circle Gateway minter
     /// @param hub The address of the Hub
     /// @param usdc The address of the USDC token
-    constructor(address gateway, address hub, address usdc) {
+    constructor(
+        address gatewayWallet,
+        address gatewayMinter,
+        address hub,
+        address usdc
+    ) {
         require(
-            gateway != address(0) && hub != address(0) && usdc != address(0),
+            gatewayWallet != address(0) &&
+                gatewayMinter != address(0) &&
+                hub != address(0) &&
+                usdc != address(0),
             InvalidZeroAddress()
         );
 
-        GATEWAY = IGateway(gateway);
+        GATEWAY_WALLET = IGatewayWallet(gatewayWallet);
+        GATEWAY_MINTER = IGatewayMinter(gatewayMinter);
         HUB = IHub(hub);
         USDC = IERC20(usdc);
         ASSET_ID = IHub(hub).getAssetId(usdc);
@@ -127,8 +141,8 @@ contract ReinvestmentController is
         _depositLastUpdate = block.timestamp;
 
         HUB.sweep(ASSET_ID, amount);
-        USDC.forceApprove(address(GATEWAY), amount);
-        GATEWAY.deposit(address(USDC), amount);
+        USDC.forceApprove(address(GATEWAY_WALLET), amount);
+        GATEWAY_WALLET.deposit(address(USDC), amount);
 
         emit Invested(amount);
     }
@@ -140,11 +154,11 @@ contract ReinvestmentController is
         bytes memory signature
     ) external onlyRole(INVESTOR_ROLE) {
         require(amount > 0 && amount <= _gatewayTxLimit, InvalidAmount());
-        require(amount <= HUB.getAssetSwept(ASSET_ID), InsufficientLiquidity());
+        require(amount <= _mintableBalance(), InsufficientLiquidity());
 
         _validateAttestation(attestationPayload, amount);
 
-        GATEWAY.gatewayMint(attestationPayload, signature);
+        GATEWAY_MINTER.gatewayMint(attestationPayload, signature);
         USDC.safeTransfer(address(HUB), amount);
         HUB.reclaim(ASSET_ID, amount);
 
@@ -162,7 +176,7 @@ contract ReinvestmentController is
         _pendingWithdrawalAmount = amount;
         _readyAtBlock = block.number + SEVEN_DAYS_IN_BLOCKS;
 
-        GATEWAY.initiateWithdrawal(address(USDC), amount);
+        GATEWAY_WALLET.initiateWithdrawal(address(USDC), amount);
 
         emit WithdrawalInitiated(amount, _readyAtBlock);
     }
@@ -177,7 +191,7 @@ contract ReinvestmentController is
         _pendingWithdrawalAmount = 0;
         _readyAtBlock = 0;
 
-        GATEWAY.withdraw(address(USDC));
+        GATEWAY_WALLET.withdraw(address(USDC));
         USDC.safeTransfer(address(HUB), amount);
         HUB.reclaim(ASSET_ID, amount);
 
@@ -273,7 +287,7 @@ contract ReinvestmentController is
 
         bytes32 structHash = BurnIntentLib.getTypedDataHash(burnIntentPayload);
         bytes32 digest = MessageHashUtils.toTypedDataHash(
-            GATEWAY.domainSeparator(),
+            GATEWAY_WALLET.domainSeparator(),
             structHash
         );
         require(digest == hash_, HashMismatch());
@@ -375,6 +389,17 @@ contract ReinvestmentController is
         require(toMint == amount, InvalidMintAmount());
     }
 
+    /// @dev Swept funds that are still mintable at the Gateway. An initiated on-chain
+    /// withdrawal moves its amount into the Gateway's withdrawing bucket, where it can no
+    /// longer back a burn or a mint, but it stays swept on the Hub until {withdraw}
+    /// reclaims it. Counting it in both places would let the same funds be committed twice.
+    function _mintableBalance() internal view returns (uint256) {
+        uint256 swept = HUB.getAssetSwept(ASSET_ID);
+        uint256 pending = _pendingWithdrawalAmount;
+
+        return swept > pending ? swept - pending : 0;
+    }
+
     /// @dev Validates a withdrawal (BurnIntent) prior to signing an attestation
     /// @param burnIntentPayload Payload containing withdrawal specification
     function _validateBurnIntent(bytes memory burnIntentPayload) internal view {
@@ -392,10 +417,7 @@ contract ReinvestmentController is
             toWithdraw += spec.getValue();
         }
 
-        require(
-            toWithdraw <= HUB.getAssetSwept(ASSET_ID),
-            BurnIntentExceedsBalance()
-        );
+        require(toWithdraw <= _mintableBalance(), BurnIntentExceedsBalance());
     }
 
     /// @dev Validates the parameters of a withdrawal (BurnIntent)

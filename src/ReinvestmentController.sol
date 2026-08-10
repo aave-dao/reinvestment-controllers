@@ -2,8 +2,9 @@
 pragma solidity 0.8.30;
 
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
+import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
@@ -19,7 +20,7 @@ import {IGatewayWallet} from "./interfaces/IGatewayWallet.sol";
 import {IHub} from "./interfaces/IHub.sol";
 import {IReinvestmentController} from "./interfaces/IReinvestmentController.sol";
 
-contract ReinvestmentController is IReinvestmentController, Initializable, AccessControl {
+contract ReinvestmentController is IReinvestmentController, Initializable, AccessControlUpgradeable {
     using SafeERC20 for IERC20;
     using TransferSpecLib for bytes29;
 
@@ -98,6 +99,8 @@ contract ReinvestmentController is IReinvestmentController, Initializable, Acces
         uint256 bufferBps_
     ) external initializer {
         require(admin != address(0), InvalidZeroAddress());
+
+        __AccessControl_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(INVESTOR_ROLE, admin);
@@ -246,7 +249,7 @@ contract ReinvestmentController is IReinvestmentController, Initializable, Acces
 
         _validateBurnIntent(burnIntentPayload);
 
-        return ERC1271_MAGIC_VALUE;
+        return IERC1271.isValidSignature.selector;
     }
 
     /// @dev Sets a new deposit timelock (in seconds)

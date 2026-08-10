@@ -32,4 +32,32 @@ interface IGatewayWallet {
     /// exposes its own separator bound to a different verifying contract.
     /// @return The EIP-712 domain separator used for signing burn intent payloads
     function domainSeparator() external view returns (bytes32);
+
+    /// @notice The balance still usable to back a burn, and therefore a mint
+    /// @dev Reduced by `initiateWithdrawal`, which moves the amount into
+    /// {withdrawingBalance}, and by Circle's out-of-band burn of an attested intent
+    /// @param token The deposited token
+    /// @param depositor The owner of the balance
+    /// @return The available balance
+    function availableBalance(address token, address depositor) external view returns (uint256);
+
+    /// @notice The balance reserved by an in-progress on-chain withdrawal
+    /// @dev No longer usable to back a burn or a mint. Paid out by `withdraw` once
+    /// {withdrawalBlock} has been reached.
+    /// @param token The deposited token
+    /// @param depositor The owner of the balance
+    /// @return The withdrawing balance
+    function withdrawingBalance(address token, address depositor) external view returns (uint256);
+
+    /// @notice The number of blocks that must pass before an initiated withdrawal completes
+    /// @return The withdrawal delay, in blocks
+    function withdrawalDelay() external view returns (uint256);
+
+    /// @notice The block at which an in-progress withdrawal becomes completable
+    /// @dev `withdraw` reverts while `block.number` is below this. Zero when no
+    /// withdrawal is in progress.
+    /// @param token The deposited token
+    /// @param depositor The owner of the balance
+    /// @return The block number
+    function withdrawalBlock(address token, address depositor) external view returns (uint256);
 }

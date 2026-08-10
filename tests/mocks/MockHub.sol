@@ -24,6 +24,8 @@ contract MockHub is IHub {
     mapping(uint256 assetId => uint256 amount) private _liquidity;
     mapping(uint256 assetId => uint256 amount) private _swept;
 
+    mapping(uint256 assetId => AssetConfig config) private _configs;
+
     /// @dev Registers `underlying` under `assetId`. Must be called before deploying the
     /// controller, whose constructor reads `getAssetId`.
     function listAsset(address underlying, uint256 assetId) external {
@@ -61,6 +63,17 @@ contract MockHub is IHub {
     function reclaim(uint256 assetId, uint256 amount) external {
         _swept[assetId] -= amount;
         _liquidity[assetId] += amount;
+    }
+
+    /// @inheritdoc IHub
+    function getAssetConfig(uint256 assetId) external view returns (AssetConfig memory) {
+        return _configs[assetId];
+    }
+
+    /// @inheritdoc IHub
+    /// @dev Unrestricted here; the real Hub gates this behind its access manager
+    function updateAssetConfig(uint256 assetId, AssetConfig calldata config, bytes calldata) external {
+        _configs[assetId] = config;
     }
 
     /// @inheritdoc IHub

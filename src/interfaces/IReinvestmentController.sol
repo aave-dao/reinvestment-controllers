@@ -2,11 +2,12 @@
 pragma solidity 0.8.30;
 
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
+import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import {IGatewayMinter} from "./IGatewayMinter.sol";
 import {IGatewayWallet} from "./IGatewayWallet.sol";
 import {IHub} from "./IHub.sol";
 
-interface IReinvestmentController {
+interface IReinvestmentController is IERC1271 {
     /// @dev Burn intent exceeds the invested amount
     error BurnIntentExceedsBalance();
 

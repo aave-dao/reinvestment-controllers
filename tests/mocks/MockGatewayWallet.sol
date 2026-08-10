@@ -82,18 +82,22 @@ contract MockGatewayWallet is IGatewayWallet {
         return _domainSeparator;
     }
 
+    /// @inheritdoc IGatewayWallet
     function availableBalance(address token, address depositor) external view returns (uint256) {
         return _availableBalances[token][depositor];
     }
 
+    /// @inheritdoc IGatewayWallet
     function withdrawingBalance(address token, address depositor) external view returns (uint256) {
         return _withdrawingBalances[token][depositor];
     }
 
+    /// @inheritdoc IGatewayWallet
     function withdrawalDelay() external view returns (uint256) {
         return _withdrawalDelay;
     }
 
+    /// @inheritdoc IGatewayWallet
     function withdrawalBlock(address token, address depositor) external view returns (uint256) {
         return _withdrawableAtBlocks[token][depositor];
     }

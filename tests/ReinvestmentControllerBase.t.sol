@@ -46,25 +46,14 @@ contract ReinvestmentControllerTest is Test {
 
         hub.listAsset(address(usdc), ASSET_ID);
 
-        implementation = new ReinvestmentController(
-            address(gatewayWallet),
-            address(gatewayMinter),
-            address(hub),
-            address(usdc)
-        );
+        implementation =
+            new ReinvestmentController(address(gatewayWallet), address(gatewayMinter), address(hub), address(usdc));
 
         proxy = new TransparentUpgradeableProxy(
             address(implementation),
             proxyAdminOwner,
             abi.encodeCall(
-                ReinvestmentController.initialize,
-                (
-                    admin,
-                    DEPOSIT_TIMELOCK,
-                    MAX_INVEST,
-                    MAX_INVEST_BPS,
-                    BUFFER_BPS
-                )
+                ReinvestmentController.initialize, (admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, BUFFER_BPS)
             )
         );
 

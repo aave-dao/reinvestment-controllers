@@ -8,8 +8,5 @@ interface IGatewayMinter {
     /// @notice Mint funds via a signed attestation
     /// @param attestationPayload The byte-encoded attestation(s)
     /// @param signature The signature from a valid attestation signer on `attestationPayload`
-    function gatewayMint(
-        bytes memory attestationPayload,
-        bytes memory signature
-    ) external;
+    function gatewayMint(bytes memory attestationPayload, bytes memory signature) external;
 }

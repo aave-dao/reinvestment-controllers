@@ -75,9 +75,7 @@ contract MockHub is IHub {
     }
 
     /// @inheritdoc IHub
-    function getAssetLiquidity(
-        uint256 assetId
-    ) external view returns (uint256) {
+    function getAssetLiquidity(uint256 assetId) external view returns (uint256) {
         return _liquidity[assetId];
     }
 

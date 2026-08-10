@@ -18,9 +18,7 @@ contract DivestTest is ReinvestmentControllerTest {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                address(this),
-                controller.INVESTOR_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), controller.INVESTOR_ROLE()
             )
         );
         controller.divest(DIVEST_AMOUNT, _attestation(DIVEST_AMOUNT), "");
@@ -96,9 +94,7 @@ contract DivestTest is ReinvestmentControllerTest {
         spec.destinationDomain = spec.sourceDomain + 1;
 
         vm.prank(admin);
-        vm.expectRevert(
-            IReinvestmentController.CrossChainTransferNotAllowed.selector
-        );
+        vm.expectRevert(IReinvestmentController.CrossChainTransferNotAllowed.selector);
         controller.divest(DIVEST_AMOUNT, _encode(spec), "");
     }
 
@@ -120,9 +116,7 @@ contract DivestTest is ReinvestmentControllerTest {
         spec.destinationToken = AddressLib._addressToBytes32(address(hub));
 
         vm.prank(admin);
-        vm.expectRevert(
-            IReinvestmentController.InvalidDestinationToken.selector
-        );
+        vm.expectRevert(IReinvestmentController.InvalidDestinationToken.selector);
         controller.divest(DIVEST_AMOUNT, _encode(spec), "");
     }
 
@@ -178,10 +172,7 @@ contract DivestTest is ReinvestmentControllerTest {
     function test_divest_revertsWith_attestationSetNotSummingToAmount() public {
         _invest(INVESTABLE);
 
-        bytes memory payload = _attestationSet(
-            DIVEST_AMOUNT / 4,
-            DIVEST_AMOUNT / 4
-        );
+        bytes memory payload = _attestationSet(DIVEST_AMOUNT / 4, DIVEST_AMOUNT / 4);
 
         vm.prank(admin);
         vm.expectRevert(IReinvestmentController.InvalidMintAmount.selector);
@@ -191,11 +182,9 @@ contract DivestTest is ReinvestmentControllerTest {
     function test_divest_attestationSetSummingToAmount() public {
         _invest(INVESTABLE);
 
-        bytes memory payload = _attestationSet(
-            DIVEST_AMOUNT / 4,
-            (DIVEST_AMOUNT * 3) / 4
-        );
+        bytes memory payload = _attestationSet(DIVEST_AMOUNT / 4, (DIVEST_AMOUNT * 3) / 4);
 
+        _burnAtGateway(DIVEST_AMOUNT);
         gatewayMinter.setNextMint(address(usdc), DIVEST_AMOUNT);
 
         vm.prank(admin);
@@ -210,6 +199,7 @@ contract DivestTest is ReinvestmentControllerTest {
         vm.prank(admin);
         controller.setGatewayTxLimit(DIVEST_AMOUNT);
 
+        _burnAtGateway(DIVEST_AMOUNT);
         gatewayMinter.setNextMint(address(usdc), DIVEST_AMOUNT);
 
         vm.prank(admin);
@@ -225,6 +215,7 @@ contract DivestTest is ReinvestmentControllerTest {
         controller.initiateWithdrawal(DIVEST_AMOUNT);
 
         uint256 amount = INVESTABLE - DIVEST_AMOUNT;
+        _burnAtGateway(amount);
         gatewayMinter.setNextMint(address(usdc), amount);
 
         vm.prank(admin);
@@ -237,6 +228,7 @@ contract DivestTest is ReinvestmentControllerTest {
     function test_divest_fullSweptAmount() public {
         _invest(INVESTABLE);
 
+        _burnAtGateway(INVESTABLE);
         gatewayMinter.setNextMint(address(usdc), INVESTABLE);
 
         vm.prank(admin);
@@ -244,12 +236,14 @@ contract DivestTest is ReinvestmentControllerTest {
 
         assertEq(controller.getInvestedAmount(), 0);
         assertEq(usdc.balanceOf(address(hub)), SUPPLIED);
-        assertEq(usdc.balanceOf(address(gatewayWallet)), INVESTABLE);
+        assertEq(usdc.balanceOf(address(gatewayWallet)), 0);
+        assertEq(gatewayWallet.availableBalance(address(usdc), address(controller)), 0);
     }
 
     function test_divest_successful() public {
         _invest(INVESTABLE);
 
+        _burnAtGateway(DIVEST_AMOUNT);
         gatewayMinter.setNextMint(address(usdc), DIVEST_AMOUNT);
 
         vm.expectEmit(address(controller));
@@ -258,89 +252,60 @@ contract DivestTest is ReinvestmentControllerTest {
         vm.prank(admin);
         controller.divest(DIVEST_AMOUNT, _attestation(DIVEST_AMOUNT), "");
 
-        assertEq(
-            usdc.balanceOf(address(hub)),
-            SUPPLIED - INVESTABLE + DIVEST_AMOUNT
-        );
+        assertEq(usdc.balanceOf(address(hub)), SUPPLIED - INVESTABLE + DIVEST_AMOUNT);
         assertEq(usdc.balanceOf(address(controller)), 0);
 
         assertEq(controller.getInvestedAmount(), INVESTABLE - DIVEST_AMOUNT);
-        assertEq(
-            hub.getAssetLiquidity(ASSET_ID),
-            SUPPLIED - INVESTABLE + DIVEST_AMOUNT
-        );
+        assertEq(hub.getAssetLiquidity(ASSET_ID), SUPPLIED - INVESTABLE + DIVEST_AMOUNT);
 
-        // The minter mints; only Circle's out-of-band gatewayBurn debits the wallet, and
-        // the controller never triggers it
-        assertEq(usdc.balanceOf(address(gatewayWallet)), INVESTABLE);
-        assertEq(
-            gatewayWallet.availableBalance(address(usdc), address(controller)),
-            INVESTABLE
-        );
+        assertEq(usdc.balanceOf(address(gatewayWallet)), INVESTABLE - DIVEST_AMOUNT);
+        assertEq(gatewayWallet.availableBalance(address(usdc), address(controller)), INVESTABLE - DIVEST_AMOUNT);
+
+        assertEq(usdc.totalSupply(), SUPPLIED);
     }
 
-    function _transferSpec(
-        uint256 value
-    ) internal view returns (TransferSpec memory) {
+    function _burnAtGateway(uint256 amount) internal {
+        gatewayWallet.simulateGatewayBurn(address(usdc), address(controller), amount);
+    }
+
+    function _transferSpec(uint256 value) internal view returns (TransferSpec memory) {
         bytes32 self = AddressLib._addressToBytes32(address(controller));
 
-        return
-            TransferSpec({
-                version: TRANSFER_SPEC_VERSION,
-                sourceDomain: 0,
-                destinationDomain: 0,
-                sourceContract: AddressLib._addressToBytes32(
-                    address(gatewayWallet)
-                ),
-                destinationContract: AddressLib._addressToBytes32(
-                    address(gatewayWallet)
-                ),
-                sourceToken: AddressLib._addressToBytes32(address(usdc)),
-                destinationToken: AddressLib._addressToBytes32(address(usdc)),
-                sourceDepositor: self,
-                destinationRecipient: self,
-                sourceSigner: self,
-                destinationCaller: bytes32(0),
-                value: value,
-                salt: bytes32(uint256(1)),
-                hookData: ""
-            });
+        return TransferSpec({
+            version: TRANSFER_SPEC_VERSION,
+            sourceDomain: 0,
+            destinationDomain: 0,
+            sourceContract: AddressLib._addressToBytes32(address(gatewayWallet)),
+            destinationContract: AddressLib._addressToBytes32(address(gatewayWallet)),
+            sourceToken: AddressLib._addressToBytes32(address(usdc)),
+            destinationToken: AddressLib._addressToBytes32(address(usdc)),
+            sourceDepositor: self,
+            destinationRecipient: self,
+            sourceSigner: self,
+            destinationCaller: bytes32(0),
+            value: value,
+            salt: bytes32(uint256(1)),
+            hookData: ""
+        });
     }
 
-    function _encode(
-        TransferSpec memory spec
-    ) internal view returns (bytes memory) {
-        return
-            AttestationLib.encodeAttestation(
-                Attestation({maxBlockHeight: block.number + 1, spec: spec})
-            );
+    function _encode(TransferSpec memory spec) internal view returns (bytes memory) {
+        return AttestationLib.encodeAttestation(Attestation({maxBlockHeight: block.number + 1, spec: spec}));
     }
 
     function _attestation(uint256 value) internal view returns (bytes memory) {
         return _encode(_transferSpec(value));
     }
 
-    function _attestationSet(
-        uint256 firstValue,
-        uint256 secondValue
-    ) internal view returns (bytes memory) {
+    function _attestationSet(uint256 firstValue, uint256 secondValue) internal view returns (bytes memory) {
         Attestation[] memory attestations = new Attestation[](2);
 
-        attestations[0] = Attestation({
-            maxBlockHeight: block.number + 1,
-            spec: _transferSpec(firstValue)
-        });
+        attestations[0] = Attestation({maxBlockHeight: block.number + 1, spec: _transferSpec(firstValue)});
 
         TransferSpec memory secondSpec = _transferSpec(secondValue);
         secondSpec.salt = bytes32(uint256(2));
-        attestations[1] = Attestation({
-            maxBlockHeight: block.number + 1,
-            spec: secondSpec
-        });
+        attestations[1] = Attestation({maxBlockHeight: block.number + 1, spec: secondSpec});
 
-        return
-            AttestationLib.encodeAttestationSet(
-                AttestationSet({attestations: attestations})
-            );
+        return AttestationLib.encodeAttestationSet(AttestationSet({attestations: attestations}));
     }
 }

@@ -1,4 +1,7 @@
 {
+  "lib/evm-gateway-contracts": {
+    "rev": "ee628dc35ee67bc8ad30ba0606cc70888688a3f1"
+  },
   "lib/forge-std": {
     "tag": {
       "name": "v1.16.2",

@@ -7,9 +7,6 @@ import {IGatewayWallet} from "./IGatewayWallet.sol";
 import {IHub} from "./IHub.sol";
 
 interface IReinvestmentController {
-    /// @dev Seven day period for withdrawal finalization has not elapsed
-    error BlockDelayNotElapsed();
-
     /// @dev Burn intent exceeds the invested amount
     error BurnIntentExceedsBalance();
 
@@ -77,10 +74,7 @@ interface IReinvestmentController {
     /// @dev Emitted when the deposit timelock is updated
     /// @param oldDepositTimelock The old deposit timelock
     /// @param depositTimelock The new deposit timelock
-    event SetDepositTimelock(
-        uint256 oldDepositTimelock,
-        uint256 depositTimelock
-    );
+    event SetDepositTimelock(uint256 oldDepositTimelock, uint256 depositTimelock);
 
     /// @dev Emitted when the maximum investable amount (in absolute terms) is updated
     /// @param oldMaxInvest The old maximum investable amount
@@ -103,8 +97,7 @@ interface IReinvestmentController {
 
     /// @dev Emitted when an on-chain withdrawal is initiated
     /// @param amount The amount of funds withdrawn
-    /// @param readyAtBlock block.number when withdrawal will be available for completion
-    event WithdrawalInitiated(uint256 amount, uint256 readyAtBlock);
+    event WithdrawalInitiated(uint256 amount);
 
     /// @notice Initializes the controller's roles and investment limits
     /// @dev Callable once, on a proxy. The implementation itself is locked at construction,
@@ -134,11 +127,7 @@ interface IReinvestmentController {
     /// @param amount The amount of funds to withdraw
     /// @param attestationPayload The specification of the withdrawal
     /// @param signature The signature that validates attestation was originated by authorized entity
-    function divest(
-        uint256 amount,
-        bytes calldata attestationPayload,
-        bytes calldata signature
-    ) external;
+    function divest(uint256 amount, bytes calldata attestationPayload, bytes calldata signature) external;
 
     /// @notice Initiates an on-chain withdrawal
     /// @dev Amount can be greater than Gateway transaction limit
@@ -220,10 +209,7 @@ interface IReinvestmentController {
     /// `adminSignature` is an ECDSA signature over `hash` and `burnIntentPayload` is the
     /// burn intent that signature authorizes
     /// @return ERC1271_MAGIC_VALUE when the signature is valid
-    function isValidSignature(
-        bytes32 hash,
-        bytes calldata signature
-    ) external view returns (bytes4);
+    function isValidSignature(bytes32 hash, bytes calldata signature) external view returns (bytes4);
 
     /// @notice Returns the deposit timelock
     /// @return The timelock (in seconds)
@@ -249,8 +235,4 @@ interface IReinvestmentController {
     /// @notice Returns the current amount pending an on-chain withdrawal
     /// @return The amount is pending withdrawal
     function pendingWithdrawalAmount() external view returns (uint256);
-
-    /// @notice Returns the block number after which pending withdrawal can be finalized
-    /// @return The block number
-    function readyAtBlock() external view returns (uint256);
 }

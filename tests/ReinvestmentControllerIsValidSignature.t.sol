@@ -30,9 +30,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
         controller.isValidSignature(keccak256("bad-digest"), sig);
     }
 
-    function test_isValidSignature_revertsWith_signerLacksInvestorRole()
-        public
-    {
+    function test_isValidSignature_revertsWith_signerLacksInvestorRole() public {
         _invest(INVESTABLE);
 
         bytes memory payload = _burnIntent(WITHDRAW_AMOUNT);
@@ -62,9 +60,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
         controller.isValidSignature(digest, sig);
     }
 
-    function test_isValidSignature_revertsWith_crossChainTransferNotAllowed()
-        public
-    {
+    function test_isValidSignature_revertsWith_crossChainTransferNotAllowed() public {
         _grantInvestorRole();
         _invest(INVESTABLE);
 
@@ -75,9 +71,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
         bytes32 digest = _digest(payload);
         bytes memory sig = _signature(INVESTOR_KEY, payload);
 
-        vm.expectRevert(
-            IReinvestmentController.CrossChainTransferNotAllowed.selector
-        );
+        vm.expectRevert(IReinvestmentController.CrossChainTransferNotAllowed.selector);
         controller.isValidSignature(digest, sig);
     }
 
@@ -96,9 +90,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
         controller.isValidSignature(digest, sig);
     }
 
-    function test_isValidSignature_revertsWith_invalidDestinationToken()
-        public
-    {
+    function test_isValidSignature_revertsWith_invalidDestinationToken() public {
         _grantInvestorRole();
         _invest(INVESTABLE);
 
@@ -109,9 +101,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
         bytes32 digest = _digest(payload);
         bytes memory sig = _signature(INVESTOR_KEY, payload);
 
-        vm.expectRevert(
-            IReinvestmentController.InvalidDestinationToken.selector
-        );
+        vm.expectRevert(IReinvestmentController.InvalidDestinationToken.selector);
         controller.isValidSignature(digest, sig);
     }
 
@@ -160,9 +150,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
         controller.isValidSignature(digest, sig);
     }
 
-    function test_isValidSignature_revertsWith_burnIntentExceedsBalance()
-        public
-    {
+    function test_isValidSignature_revertsWith_burnIntentExceedsBalance() public {
         _grantInvestorRole();
         _invest(INVESTABLE);
 
@@ -171,15 +159,11 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
         bytes32 digest = _digest(payload);
         bytes memory sig = _signature(INVESTOR_KEY, payload);
 
-        vm.expectRevert(
-            IReinvestmentController.BurnIntentExceedsBalance.selector
-        );
+        vm.expectRevert(IReinvestmentController.BurnIntentExceedsBalance.selector);
         controller.isValidSignature(digest, sig);
     }
 
-    function test_isValidSignature_revertsWith_balanceQueuedForWithdrawal()
-        public
-    {
+    function test_isValidSignature_revertsWith_balanceQueuedForWithdrawal() public {
         _grantInvestorRole();
         _invest(INVESTABLE);
 
@@ -191,9 +175,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
         bytes32 digest = _digest(payload);
         bytes memory sig = _signature(INVESTOR_KEY, payload);
 
-        vm.expectRevert(
-            IReinvestmentController.BurnIntentExceedsBalance.selector
-        );
+        vm.expectRevert(IReinvestmentController.BurnIntentExceedsBalance.selector);
         controller.isValidSignature(digest, sig);
     }
 
@@ -206,9 +188,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
         bytes32 digest = _digest(payload);
         bytes memory sig = _signature(INVESTOR_KEY, payload);
 
-        vm.expectRevert(
-            IReinvestmentController.BurnIntentExceedsBalance.selector
-        );
+        vm.expectRevert(IReinvestmentController.BurnIntentExceedsBalance.selector);
         controller.isValidSignature(digest, sig);
     }
 
@@ -219,10 +199,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
         bytes memory payload = _burnIntentSet(WITHDRAW_AMOUNT, WITHDRAW_AMOUNT);
 
         assertEq(
-            controller.isValidSignature(
-                _digest(payload),
-                _signature(INVESTOR_KEY, payload)
-            ),
+            controller.isValidSignature(_digest(payload), _signature(INVESTOR_KEY, payload)),
             controller.ERC1271_MAGIC_VALUE()
         );
     }
@@ -234,10 +211,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
         bytes memory payload = _burnIntent(INVESTABLE);
 
         assertEq(
-            controller.isValidSignature(
-                _digest(payload),
-                _signature(INVESTOR_KEY, payload)
-            ),
+            controller.isValidSignature(_digest(payload), _signature(INVESTOR_KEY, payload)),
             controller.ERC1271_MAGIC_VALUE()
         );
     }
@@ -249,10 +223,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
         bytes memory payload = _burnIntent(WITHDRAW_AMOUNT);
 
         assertEq(
-            controller.isValidSignature(
-                _digest(payload),
-                _signature(INVESTOR_KEY, payload)
-            ),
+            controller.isValidSignature(_digest(payload), _signature(INVESTOR_KEY, payload)),
             controller.ERC1271_MAGIC_VALUE()
         );
     }
@@ -264,95 +235,55 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
         controller.grantRole(role, investor);
     }
 
-    function _transferSpec(
-        uint256 value
-    ) internal view returns (TransferSpec memory) {
+    function _transferSpec(uint256 value) internal view returns (TransferSpec memory) {
         bytes32 self = AddressLib._addressToBytes32(address(controller));
 
-        return
-            TransferSpec({
-                version: TRANSFER_SPEC_VERSION,
-                sourceDomain: 0,
-                destinationDomain: 0,
-                sourceContract: AddressLib._addressToBytes32(
-                    address(gatewayWallet)
-                ),
-                destinationContract: AddressLib._addressToBytes32(
-                    address(gatewayMinter)
-                ),
-                sourceToken: AddressLib._addressToBytes32(address(usdc)),
-                destinationToken: AddressLib._addressToBytes32(address(usdc)),
-                sourceDepositor: self,
-                destinationRecipient: self,
-                sourceSigner: self,
-                destinationCaller: bytes32(0),
-                value: value,
-                salt: bytes32(uint256(1)),
-                hookData: ""
-            });
+        return TransferSpec({
+            version: TRANSFER_SPEC_VERSION,
+            sourceDomain: 0,
+            destinationDomain: 0,
+            sourceContract: AddressLib._addressToBytes32(address(gatewayWallet)),
+            destinationContract: AddressLib._addressToBytes32(address(gatewayMinter)),
+            sourceToken: AddressLib._addressToBytes32(address(usdc)),
+            destinationToken: AddressLib._addressToBytes32(address(usdc)),
+            sourceDepositor: self,
+            destinationRecipient: self,
+            sourceSigner: self,
+            destinationCaller: bytes32(0),
+            value: value,
+            salt: bytes32(uint256(1)),
+            hookData: ""
+        });
     }
 
-    function _encode(
-        TransferSpec memory spec
-    ) internal view returns (bytes memory) {
-        return
-            BurnIntentLib.encodeBurnIntent(
-                BurnIntent({
-                    maxBlockHeight: block.number + 1,
-                    maxFee: 0,
-                    spec: spec
-                })
-            );
+    function _encode(TransferSpec memory spec) internal view returns (bytes memory) {
+        return BurnIntentLib.encodeBurnIntent(BurnIntent({maxBlockHeight: block.number + 1, maxFee: 0, spec: spec}));
     }
 
     function _burnIntent(uint256 value) internal view returns (bytes memory) {
         return _encode(_transferSpec(value));
     }
 
-    function _burnIntentSet(
-        uint256 firstValue,
-        uint256 secondValue
-    ) internal view returns (bytes memory) {
+    function _burnIntentSet(uint256 firstValue, uint256 secondValue) internal view returns (bytes memory) {
         BurnIntent[] memory intents = new BurnIntent[](2);
 
-        intents[0] = BurnIntent({
-            maxBlockHeight: block.number + 1,
-            maxFee: 0,
-            spec: _transferSpec(firstValue)
-        });
+        intents[0] = BurnIntent({maxBlockHeight: block.number + 1, maxFee: 0, spec: _transferSpec(firstValue)});
 
         TransferSpec memory secondSpec = _transferSpec(secondValue);
         secondSpec.salt = bytes32(uint256(2));
-        intents[1] = BurnIntent({
-            maxBlockHeight: block.number + 1,
-            maxFee: 0,
-            spec: secondSpec
-        });
+        intents[1] = BurnIntent({maxBlockHeight: block.number + 1, maxFee: 0, spec: secondSpec});
 
-        return
-            BurnIntentLib.encodeBurnIntentSet(
-                BurnIntentSet({intents: intents})
-            );
+        return BurnIntentLib.encodeBurnIntentSet(BurnIntentSet({intents: intents}));
     }
 
-    function _digest(
-        bytes memory burnIntentPayload
-    ) internal view returns (bytes32) {
-        return
-            MessageHashUtils.toTypedDataHash(
-                gatewayWallet.domainSeparator(),
-                BurnIntentLib.getTypedDataHash(burnIntentPayload)
-            );
-    }
-
-    function _signature(
-        uint256 signerKey,
-        bytes memory burnIntentPayload
-    ) internal view returns (bytes memory) {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(
-            signerKey,
-            _digest(burnIntentPayload)
+    function _digest(bytes memory burnIntentPayload) internal view returns (bytes32) {
+        return MessageHashUtils.toTypedDataHash(
+            gatewayWallet.domainSeparator(), BurnIntentLib.getTypedDataHash(burnIntentPayload)
         );
+    }
+
+    function _signature(uint256 signerKey, bytes memory burnIntentPayload) internal view returns (bytes memory) {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, _digest(burnIntentPayload));
 
         return abi.encode(abi.encodePacked(r, s, v), burnIntentPayload);
     }

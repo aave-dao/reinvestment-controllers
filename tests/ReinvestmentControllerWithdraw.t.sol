@@ -4,9 +4,10 @@ pragma solidity 0.8.30;
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
 import {IReinvestmentController} from "../src/ReinvestmentController.sol";
+import {MockGatewayWallet} from "./mocks/MockGatewayWallet.sol";
 import {ReinvestmentControllerTest} from "./ReinvestmentControllerBase.t.sol";
 
-uint256 constant SEVEN_DAYS_IN_BLOCKS = 50_400;
+uint256 constant GATEWAY_WITHDRAWAL_DELAY = 50_400;
 uint256 constant WITHDRAW_AMOUNT = 100_000e6;
 
 contract InitiateWithdrawalTest is ReinvestmentControllerTest {
@@ -15,9 +16,7 @@ contract InitiateWithdrawalTest is ReinvestmentControllerTest {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                address(this),
-                controller.DEFAULT_ADMIN_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), controller.DEFAULT_ADMIN_ROLE()
             )
         );
         controller.initiateWithdrawal(WITHDRAW_AMOUNT);
@@ -31,9 +30,7 @@ contract InitiateWithdrawalTest is ReinvestmentControllerTest {
         controller.initiateWithdrawal(0);
     }
 
-    function test_initiateWithdrawal_revertsWith_insufficientLiquidity()
-        public
-    {
+    function test_initiateWithdrawal_revertsWith_insufficientLiquidity() public {
         _invest(INVESTABLE);
 
         vm.prank(admin);
@@ -55,31 +52,19 @@ contract InitiateWithdrawalTest is ReinvestmentControllerTest {
     function test_initiateWithdrawal_successful() public {
         _invest(INVESTABLE);
 
-        uint256 expectedReadyAtBlock = block.number + SEVEN_DAYS_IN_BLOCKS;
+        uint256 expectedWithdrawalBlock = block.number + GATEWAY_WITHDRAWAL_DELAY;
 
         vm.expectEmit(address(controller));
-        emit IReinvestmentController.WithdrawalInitiated(
-            WITHDRAW_AMOUNT,
-            expectedReadyAtBlock
-        );
+        emit IReinvestmentController.WithdrawalInitiated(WITHDRAW_AMOUNT);
 
         vm.prank(admin);
         controller.initiateWithdrawal(WITHDRAW_AMOUNT);
 
         assertEq(controller.pendingWithdrawalAmount(), WITHDRAW_AMOUNT);
-        assertEq(controller.readyAtBlock(), expectedReadyAtBlock);
+        assertEq(gatewayWallet.withdrawalBlock(address(usdc), address(controller)), expectedWithdrawalBlock);
 
-        assertEq(
-            gatewayWallet.withdrawingBalance(
-                address(usdc),
-                address(controller)
-            ),
-            WITHDRAW_AMOUNT
-        );
-        assertEq(
-            gatewayWallet.availableBalance(address(usdc), address(controller)),
-            INVESTABLE - WITHDRAW_AMOUNT
-        );
+        assertEq(gatewayWallet.withdrawingBalance(address(usdc), address(controller)), WITHDRAW_AMOUNT);
+        assertEq(gatewayWallet.availableBalance(address(usdc), address(controller)), INVESTABLE - WITHDRAW_AMOUNT);
 
         assertEq(usdc.balanceOf(address(gatewayWallet)), INVESTABLE);
         assertEq(controller.getInvestedAmount(), INVESTABLE);
@@ -91,13 +76,11 @@ contract WithdrawTest is ReinvestmentControllerTest {
         _invest(INVESTABLE);
         _initiateWithdrawal(WITHDRAW_AMOUNT);
 
-        vm.roll(controller.readyAtBlock());
+        vm.roll(_withdrawalBlock());
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                address(this),
-                controller.DEFAULT_ADMIN_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), controller.DEFAULT_ADMIN_ROLE()
             )
         );
         controller.withdraw();
@@ -111,14 +94,14 @@ contract WithdrawTest is ReinvestmentControllerTest {
         controller.withdraw();
     }
 
-    function test_withdraw_revertsWith_blockDelayNotElapsed() public {
+    function test_withdraw_revertsWith_gatewayDelayNotElapsed() public {
         _invest(INVESTABLE);
         _initiateWithdrawal(WITHDRAW_AMOUNT);
 
-        vm.roll(controller.readyAtBlock() - 1);
+        vm.roll(_withdrawalBlock() - 1);
 
         vm.prank(admin);
-        vm.expectRevert(IReinvestmentController.BlockDelayNotElapsed.selector);
+        vm.expectRevert(MockGatewayWallet.WithdrawalNotYetAvailable.selector);
         controller.withdraw();
     }
 
@@ -126,7 +109,7 @@ contract WithdrawTest is ReinvestmentControllerTest {
         _invest(INVESTABLE);
         _initiateWithdrawal(WITHDRAW_AMOUNT);
 
-        vm.roll(controller.readyAtBlock());
+        vm.roll(_withdrawalBlock());
 
         vm.prank(admin);
         controller.withdraw();
@@ -138,7 +121,7 @@ contract WithdrawTest is ReinvestmentControllerTest {
         _invest(INVESTABLE);
         _initiateWithdrawal(WITHDRAW_AMOUNT);
 
-        vm.roll(controller.readyAtBlock());
+        vm.roll(_withdrawalBlock());
 
         vm.prank(admin);
         controller.withdraw();
@@ -152,7 +135,7 @@ contract WithdrawTest is ReinvestmentControllerTest {
         _invest(INVESTABLE);
         _initiateWithdrawal(WITHDRAW_AMOUNT);
 
-        vm.roll(controller.readyAtBlock() + 1);
+        vm.roll(_withdrawalBlock() + 1);
 
         vm.expectEmit(address(controller));
         emit IReinvestmentController.WithdrawalCompleted(WITHDRAW_AMOUNT);
@@ -161,30 +144,18 @@ contract WithdrawTest is ReinvestmentControllerTest {
         controller.withdraw();
 
         assertEq(controller.pendingWithdrawalAmount(), 0);
-        assertEq(controller.readyAtBlock(), 0);
 
-        assertEq(
-            usdc.balanceOf(address(hub)),
-            SUPPLIED - INVESTABLE + WITHDRAW_AMOUNT
-        );
-        assertEq(
-            usdc.balanceOf(address(gatewayWallet)),
-            INVESTABLE - WITHDRAW_AMOUNT
-        );
+        assertEq(usdc.balanceOf(address(hub)), SUPPLIED - INVESTABLE + WITHDRAW_AMOUNT);
+        assertEq(usdc.balanceOf(address(gatewayWallet)), INVESTABLE - WITHDRAW_AMOUNT);
         assertEq(usdc.balanceOf(address(controller)), 0);
 
         assertEq(controller.getInvestedAmount(), INVESTABLE - WITHDRAW_AMOUNT);
-        assertEq(
-            hub.getAssetLiquidity(ASSET_ID),
-            SUPPLIED - INVESTABLE + WITHDRAW_AMOUNT
-        );
-        assertEq(
-            gatewayWallet.withdrawingBalance(
-                address(usdc),
-                address(controller)
-            ),
-            0
-        );
+        assertEq(hub.getAssetLiquidity(ASSET_ID), SUPPLIED - INVESTABLE + WITHDRAW_AMOUNT);
+        assertEq(gatewayWallet.withdrawingBalance(address(usdc), address(controller)), 0);
+    }
+
+    function _withdrawalBlock() internal view returns (uint256) {
+        return gatewayWallet.withdrawalBlock(address(usdc), address(controller));
     }
 
     function _initiateWithdrawal(uint256 amount) internal {

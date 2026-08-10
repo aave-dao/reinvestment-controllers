@@ -23,12 +23,7 @@ contract ConstructorTest is Test {
         MockHub hub = new MockHub();
 
         vm.expectRevert(IReinvestmentController.InvalidZeroAddress.selector);
-        new ReinvestmentController(
-            address(0),
-            address(gatewayMinter),
-            address(hub),
-            address(usdc)
-        );
+        new ReinvestmentController(address(0), address(gatewayMinter), address(hub), address(usdc));
     }
 
     function test_constructor_revertsWith_gatewayMinterIsZeroAddress() public {
@@ -37,12 +32,7 @@ contract ConstructorTest is Test {
         MockHub hub = new MockHub();
 
         vm.expectRevert(IReinvestmentController.InvalidZeroAddress.selector);
-        new ReinvestmentController(
-            address(gatewayWallet),
-            address(0),
-            address(hub),
-            address(usdc)
-        );
+        new ReinvestmentController(address(gatewayWallet), address(0), address(hub), address(usdc));
     }
 
     function test_constructor_revertsWith_hubIsZeroAddress() public {
@@ -51,12 +41,7 @@ contract ConstructorTest is Test {
         MockGatewayMinter gatewayMinter = new MockGatewayMinter();
 
         vm.expectRevert(IReinvestmentController.InvalidZeroAddress.selector);
-        new ReinvestmentController(
-            address(gatewayWallet),
-            address(gatewayMinter),
-            address(0),
-            address(usdc)
-        );
+        new ReinvestmentController(address(gatewayWallet), address(gatewayMinter), address(0), address(usdc));
     }
 
     function test_constructor_revertsWith_usdcIsZeroAddress() public {
@@ -65,12 +50,7 @@ contract ConstructorTest is Test {
         MockHub hub = new MockHub();
 
         vm.expectRevert(IReinvestmentController.InvalidZeroAddress.selector);
-        new ReinvestmentController(
-            address(gatewayWallet),
-            address(gatewayMinter),
-            address(hub),
-            address(0)
-        );
+        new ReinvestmentController(address(gatewayWallet), address(gatewayMinter), address(hub), address(0));
     }
 
     function test_constructor_revertsWith_assetNotListedOnHub() public {
@@ -80,12 +60,7 @@ contract ConstructorTest is Test {
         MockHub hub = new MockHub();
 
         vm.expectRevert(MockHub.AssetNotListed.selector);
-        new ReinvestmentController(
-            address(gatewayWallet),
-            address(gatewayMinter),
-            address(hub),
-            address(usdc)
-        );
+        new ReinvestmentController(address(gatewayWallet), address(gatewayMinter), address(hub), address(usdc));
     }
 
     function test_constructor_locksImplementation() public {
@@ -95,12 +70,8 @@ contract ConstructorTest is Test {
         MockHub hub = new MockHub();
         hub.listAsset(address(usdc), ASSET_ID);
 
-        ReinvestmentController controller = new ReinvestmentController(
-            address(gatewayWallet),
-            address(gatewayMinter),
-            address(hub),
-            address(usdc)
-        );
+        ReinvestmentController controller =
+            new ReinvestmentController(address(gatewayWallet), address(gatewayMinter), address(hub), address(usdc));
 
         vm.expectRevert(Initializable.InvalidInitialization.selector);
         controller.initialize(address(this), 1 days, 1e6, 8_000, 1_000);
@@ -113,12 +84,8 @@ contract ConstructorTest is Test {
         MockHub hub = new MockHub();
         hub.listAsset(address(usdc), ASSET_ID);
 
-        ReinvestmentController controller = new ReinvestmentController(
-            address(gatewayWallet),
-            address(gatewayMinter),
-            address(hub),
-            address(usdc)
-        );
+        ReinvestmentController controller =
+            new ReinvestmentController(address(gatewayWallet), address(gatewayMinter), address(hub), address(usdc));
 
         assertEq(address(controller.GATEWAY_WALLET()), address(gatewayWallet));
         assertEq(address(controller.GATEWAY_MINTER()), address(gatewayMinter));
@@ -131,24 +98,12 @@ contract ConstructorTest is Test {
 contract InitializeTest is ReinvestmentControllerTest {
     function test_initialize_revertsWith_alreadyInitialized() public {
         vm.expectRevert(Initializable.InvalidInitialization.selector);
-        controller.initialize(
-            admin,
-            DEPOSIT_TIMELOCK,
-            MAX_INVEST,
-            MAX_INVEST_BPS,
-            BUFFER_BPS
-        );
+        controller.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, BUFFER_BPS);
     }
 
     function test_initialize_revertsWith_adminIsZeroAddress() public {
         vm.expectRevert(IReinvestmentController.InvalidZeroAddress.selector);
-        _initProxy(
-            address(0),
-            DEPOSIT_TIMELOCK,
-            MAX_INVEST,
-            MAX_INVEST_BPS,
-            BUFFER_BPS
-        );
+        _initProxy(address(0), DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, BUFFER_BPS);
     }
 
     function test_initialize_revertsWith_depositTimelockIsZero() public {
@@ -177,17 +132,10 @@ contract InitializeTest is ReinvestmentControllerTest {
     }
 
     function test_initialize_successful() public {
-        ReinvestmentController newController = _initProxy(
-            admin,
-            DEPOSIT_TIMELOCK,
-            MAX_INVEST,
-            MAX_INVEST_BPS,
-            BUFFER_BPS
-        );
+        ReinvestmentController newController =
+            _initProxy(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, BUFFER_BPS);
 
-        assertTrue(
-            newController.hasRole(newController.DEFAULT_ADMIN_ROLE(), admin)
-        );
+        assertTrue(newController.hasRole(newController.DEFAULT_ADMIN_ROLE(), admin));
         assertTrue(newController.hasRole(newController.INVESTOR_ROLE(), admin));
 
         assertEq(newController.depositTimelock(), DEPOSIT_TIMELOCK);
@@ -208,14 +156,7 @@ contract InitializeTest is ReinvestmentControllerTest {
             address(implementation),
             proxyAdminOwner,
             abi.encodeCall(
-                ReinvestmentController.initialize,
-                (
-                    admin_,
-                    depositTimelock_,
-                    maxInvest_,
-                    maxInvestBps_,
-                    bufferBps_
-                )
+                ReinvestmentController.initialize, (admin_, depositTimelock_, maxInvest_, maxInvestBps_, bufferBps_)
             )
         );
 
@@ -229,9 +170,7 @@ contract SetDepositTimelockTest is ReinvestmentControllerTest {
     function test_setDepositTimelock_revertsWith_callerIsNotAdmin() public {
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                address(this),
-                controller.DEFAULT_ADMIN_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), controller.DEFAULT_ADMIN_ROLE()
             )
         );
         controller.setDepositTimelock(NEW_DEPOSIT_TIMELOCK);
@@ -245,10 +184,7 @@ contract SetDepositTimelockTest is ReinvestmentControllerTest {
 
     function test_setDepositTimelock_successful() public {
         vm.expectEmit(address(controller));
-        emit IReinvestmentController.SetDepositTimelock(
-            DEPOSIT_TIMELOCK,
-            NEW_DEPOSIT_TIMELOCK
-        );
+        emit IReinvestmentController.SetDepositTimelock(DEPOSIT_TIMELOCK, NEW_DEPOSIT_TIMELOCK);
 
         vm.prank(admin);
         controller.setDepositTimelock(NEW_DEPOSIT_TIMELOCK);
@@ -264,9 +200,7 @@ contract SetGatewayTxLimitTest is ReinvestmentControllerTest {
     function test_setGatewayTxLimit_revertsWith_callerIsNotAdmin() public {
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                address(this),
-                controller.DEFAULT_ADMIN_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), controller.DEFAULT_ADMIN_ROLE()
             )
         );
         controller.setGatewayTxLimit(NEW_GATEWAY_TX_LIMIT);
@@ -281,10 +215,7 @@ contract SetGatewayTxLimitTest is ReinvestmentControllerTest {
 
     function test_setGatewayTxLimit_successful() public {
         vm.expectEmit(address(controller));
-        emit IReinvestmentController.SetGatewayTxLimit(
-            DEFAULT_GATEWAY_TX_LIMIT,
-            NEW_GATEWAY_TX_LIMIT
-        );
+        emit IReinvestmentController.SetGatewayTxLimit(DEFAULT_GATEWAY_TX_LIMIT, NEW_GATEWAY_TX_LIMIT);
 
         vm.prank(admin);
         controller.setGatewayTxLimit(NEW_GATEWAY_TX_LIMIT);
@@ -299,9 +230,7 @@ contract SetBufferBpsTest is ReinvestmentControllerTest {
     function test_setBufferBps_revertsWith_callerIsNotAdmin() public {
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                address(this),
-                controller.DEFAULT_ADMIN_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), controller.DEFAULT_ADMIN_ROLE()
             )
         );
         controller.setBufferBps(NEW_BUFFER_BPS);
@@ -336,9 +265,7 @@ contract SetMaxInvestTest is ReinvestmentControllerTest {
     function test_setMaxInvest_revertsWith_callerIsNotAdmin() public {
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                address(this),
-                controller.DEFAULT_ADMIN_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), controller.DEFAULT_ADMIN_ROLE()
             )
         );
         controller.setMaxInvest(NEW_MAX_INVEST);
@@ -369,9 +296,7 @@ contract SetMaxInvestBpsTest is ReinvestmentControllerTest {
     function test_setMaxInvestBps_revertsWith_callerIsNotAdmin() public {
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                address(this),
-                controller.DEFAULT_ADMIN_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), controller.DEFAULT_ADMIN_ROLE()
             )
         );
         controller.setMaxInvestBps(NEW_MAX_INVEST_BPS);
@@ -391,10 +316,7 @@ contract SetMaxInvestBpsTest is ReinvestmentControllerTest {
 
     function test_setMaxInvestBps_successful() public {
         vm.expectEmit(address(controller));
-        emit IReinvestmentController.SetMaxInvestBps(
-            MAX_INVEST_BPS,
-            NEW_MAX_INVEST_BPS
-        );
+        emit IReinvestmentController.SetMaxInvestBps(MAX_INVEST_BPS, NEW_MAX_INVEST_BPS);
 
         vm.prank(admin);
         controller.setMaxInvestBps(NEW_MAX_INVEST_BPS);

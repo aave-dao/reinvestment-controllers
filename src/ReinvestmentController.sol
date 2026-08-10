@@ -19,11 +19,7 @@ import {IGatewayWallet} from "./interfaces/IGatewayWallet.sol";
 import {IHub} from "./interfaces/IHub.sol";
 import {IReinvestmentController} from "./interfaces/IReinvestmentController.sol";
 
-contract ReinvestmentController is
-    IReinvestmentController,
-    Initializable,
-    AccessControl
-{
+contract ReinvestmentController is IReinvestmentController, Initializable, AccessControl {
     using SafeERC20 for IERC20;
     using TransferSpecLib for bytes29;
 
@@ -36,8 +32,6 @@ contract ReinvestmentController is
     /// @dev Maximum value of BPS representing 100%
     uint256 private constant MAX_BPS = 10_000;
 
-    /// @dev Number of blocks until on-chain withdrawal can be finalized
-    uint256 private constant SEVEN_DAYS_IN_BLOCKS = 50_400;
     /// @inheritdoc IReinvestmentController
     IGatewayWallet public immutable GATEWAY_WALLET;
 
@@ -74,26 +68,15 @@ contract ReinvestmentController is
     /// @dev Pending amount to be withdrawn on-chain
     uint256 private _pendingWithdrawalAmount;
 
-    /// @dev Block number when pending withdrawal can be finalized
-    uint256 private _readyAtBlock;
-
     /// @dev Sets the immutable protocol addresses and locks the implementation. The
     /// resulting contract is inert until {initialize} is called on a proxy in front of it.
     /// @param gatewayWallet The address of the Circle Gateway wallet
     /// @param gatewayMinter The address of the Circle Gateway minter
     /// @param hub The address of the Hub
     /// @param usdc The address of the USDC token
-    constructor(
-        address gatewayWallet,
-        address gatewayMinter,
-        address hub,
-        address usdc
-    ) {
+    constructor(address gatewayWallet, address gatewayMinter, address hub, address usdc) {
         require(
-            gatewayWallet != address(0) &&
-                gatewayMinter != address(0) &&
-                hub != address(0) &&
-                usdc != address(0),
+            gatewayWallet != address(0) && gatewayMinter != address(0) && hub != address(0) && usdc != address(0),
             InvalidZeroAddress()
         );
 
@@ -128,15 +111,9 @@ contract ReinvestmentController is
 
     /// @inheritdoc IReinvestmentController
     function invest(uint256 amount) external onlyRole(INVESTOR_ROLE) {
-        require(
-            block.timestamp > _depositLastUpdate + _depositTimelock,
-            DepositTimelock()
-        );
+        require(block.timestamp > _depositLastUpdate + _depositTimelock, DepositTimelock());
         require(amount > 0, InvalidAmount());
-        require(
-            amount <= _getInvestableAmount(),
-            MaximumInvestAmountExceeded()
-        );
+        require(amount <= _getInvestableAmount(), MaximumInvestAmountExceeded());
 
         _depositLastUpdate = block.timestamp;
 
@@ -148,11 +125,10 @@ contract ReinvestmentController is
     }
 
     /// @inheritdoc IReinvestmentController
-    function divest(
-        uint256 amount,
-        bytes memory attestationPayload,
-        bytes memory signature
-    ) external onlyRole(INVESTOR_ROLE) {
+    function divest(uint256 amount, bytes memory attestationPayload, bytes memory signature)
+        external
+        onlyRole(INVESTOR_ROLE)
+    {
         require(amount > 0 && amount <= _gatewayTxLimit, InvalidAmount());
         require(amount <= _mintableBalance(), InsufficientLiquidity());
 
@@ -166,19 +142,16 @@ contract ReinvestmentController is
     }
 
     /// @inheritdoc IReinvestmentController
-    function initiateWithdrawal(
-        uint256 amount
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function initiateWithdrawal(uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(amount > 0, InvalidAmount());
         require(amount <= HUB.getAssetSwept(ASSET_ID), InsufficientLiquidity());
         require(_pendingWithdrawalAmount == 0, WithdrawalInProcess());
 
         _pendingWithdrawalAmount = amount;
-        _readyAtBlock = block.number + SEVEN_DAYS_IN_BLOCKS;
 
         GATEWAY_WALLET.initiateWithdrawal(address(USDC), amount);
 
-        emit WithdrawalInitiated(amount, _readyAtBlock);
+        emit WithdrawalInitiated(amount);
     }
 
     /// @inheritdoc IReinvestmentController
@@ -186,10 +159,8 @@ contract ReinvestmentController is
         uint256 amount = _pendingWithdrawalAmount;
 
         require(amount > 0, NoWithdrawalInProcess());
-        require(block.number >= _readyAtBlock, BlockDelayNotElapsed());
 
         _pendingWithdrawalAmount = 0;
-        _readyAtBlock = 0;
 
         GATEWAY_WALLET.withdraw(address(USDC));
         USDC.safeTransfer(address(HUB), amount);
@@ -199,37 +170,27 @@ contract ReinvestmentController is
     }
 
     /// @inheritdoc IReinvestmentController
-    function setDepositTimelock(
-        uint256 depositTimelock_
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setDepositTimelock(uint256 depositTimelock_) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _setDepositTimelock(depositTimelock_);
     }
 
     /// @inheritdoc IReinvestmentController
-    function setGatewayTxLimit(
-        uint256 limit
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setGatewayTxLimit(uint256 limit) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _setGatewayTxLimit(limit);
     }
 
     /// @inheritdoc IReinvestmentController
-    function setBufferBps(
-        uint256 bufferBps_
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setBufferBps(uint256 bufferBps_) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _setBufferBps(bufferBps_);
     }
 
     /// @inheritdoc IReinvestmentController
-    function setMaxInvest(
-        uint256 maxAmount
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setMaxInvest(uint256 maxAmount) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _setMaxInvest(maxAmount);
     }
 
     /// @inheritdoc IReinvestmentController
-    function setMaxInvestBps(
-        uint256 maxBps
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setMaxInvestBps(uint256 maxBps) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _setMaxInvestBps(maxBps);
     }
 
@@ -273,23 +234,11 @@ contract ReinvestmentController is
     }
 
     /// @inheritdoc IReinvestmentController
-    function readyAtBlock() external view returns (uint256) {
-        return _readyAtBlock;
-    }
-
-    /// @inheritdoc IReinvestmentController
-    function isValidSignature(
-        bytes32 hash_,
-        bytes memory signature
-    ) external view returns (bytes4) {
-        (bytes memory adminSignature, bytes memory burnIntentPayload) = abi
-            .decode(signature, (bytes, bytes));
+    function isValidSignature(bytes32 hash_, bytes memory signature) external view returns (bytes4) {
+        (bytes memory adminSignature, bytes memory burnIntentPayload) = abi.decode(signature, (bytes, bytes));
 
         bytes32 structHash = BurnIntentLib.getTypedDataHash(burnIntentPayload);
-        bytes32 digest = MessageHashUtils.toTypedDataHash(
-            GATEWAY_WALLET.domainSeparator(),
-            structHash
-        );
+        bytes32 digest = MessageHashUtils.toTypedDataHash(GATEWAY_WALLET.domainSeparator(), structHash);
         require(digest == hash_, HashMismatch());
 
         address recoveredSigner = ECDSA.recover(digest, adminSignature);
@@ -357,10 +306,7 @@ contract ReinvestmentController is
         if (idle <= buffer) return 0;
 
         uint256 freeIdle = idle - buffer;
-        uint256 capLimit = Math.min(
-            _maxInvest,
-            (supplied * _maxInvestBps) / MAX_BPS
-        );
+        uint256 capLimit = Math.min(_maxInvest, (supplied * _maxInvestBps) / MAX_BPS);
         uint256 capRoom = capLimit > swept ? capLimit - swept : 0;
 
         return Math.min(freeIdle, capRoom);
@@ -369,10 +315,7 @@ contract ReinvestmentController is
     /// @dev Validates an attestation that was signed to withdraw funds
     /// @param attestationPayload Payload containing signed transfer specification
     /// @param amount Amount of token to withdraw
-    function _validateAttestation(
-        bytes memory attestationPayload,
-        uint256 amount
-    ) internal view {
+    function _validateAttestation(bytes memory attestationPayload, uint256 amount) internal view {
         uint256 toMint = 0;
 
         Cursor memory cursor = AttestationLib.cursor(attestationPayload);
@@ -427,15 +370,9 @@ contract ReinvestmentController is
         bytes32 expectedToken = AddressLib._addressToBytes32(token);
         bytes32 self = AddressLib._addressToBytes32(address(this));
 
-        require(
-            spec.getSourceDomain() == spec.getDestinationDomain(),
-            CrossChainTransferNotAllowed()
-        );
+        require(spec.getSourceDomain() == spec.getDestinationDomain(), CrossChainTransferNotAllowed());
         require(spec.getSourceToken() == expectedToken, InvalidSourceToken());
-        require(
-            spec.getDestinationToken() == expectedToken,
-            InvalidDestinationToken()
-        );
+        require(spec.getDestinationToken() == expectedToken, InvalidDestinationToken());
         require(spec.getSourceDepositor() == self, InvalidDepositor());
         require(spec.getDestinationRecipient() == self, InvalidRecipient());
         require(spec.getSourceSigner() == self, InvalidSigner());

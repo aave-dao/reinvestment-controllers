@@ -7,14 +7,10 @@ import {IReinvestmentController} from "../src/ReinvestmentController.sol";
 import {ReinvestmentControllerTest} from "./ReinvestmentControllerBase.t.sol";
 
 contract InvestTest is ReinvestmentControllerTest {
-    function test_invest_revertsWith_callerIsNotInvestorBeforeAmountCheck()
-        public
-    {
+    function test_invest_revertsWith_callerIsNotInvestorBeforeAmountCheck() public {
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                address(this),
-                controller.INVESTOR_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), controller.INVESTOR_ROLE()
             )
         );
         controller.invest(0);
@@ -23,9 +19,7 @@ contract InvestTest is ReinvestmentControllerTest {
     function test_invest_revertsWith_callerIsNotInvestor() public {
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                address(this),
-                controller.INVESTOR_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), controller.INVESTOR_ROLE()
             )
         );
         controller.invest(1e6);
@@ -57,9 +51,7 @@ contract InvestTest is ReinvestmentControllerTest {
 
     function test_invest_revertsWith_amountExceedsInvestable() public {
         vm.prank(admin);
-        vm.expectRevert(
-            IReinvestmentController.MaximumInvestAmountExceeded.selector
-        );
+        vm.expectRevert(IReinvestmentController.MaximumInvestAmountExceeded.selector);
         controller.invest(INVESTABLE + 1);
     }
 
@@ -69,9 +61,7 @@ contract InvestTest is ReinvestmentControllerTest {
         assertEq(controller.getInvestableAmount(), 0);
 
         vm.prank(admin);
-        vm.expectRevert(
-            IReinvestmentController.MaximumInvestAmountExceeded.selector
-        );
+        vm.expectRevert(IReinvestmentController.MaximumInvestAmountExceeded.selector);
         controller.invest(1);
     }
 
@@ -80,9 +70,7 @@ contract InvestTest is ReinvestmentControllerTest {
         controller.setMaxInvest(0);
 
         vm.prank(admin);
-        vm.expectRevert(
-            IReinvestmentController.MaximumInvestAmountExceeded.selector
-        );
+        vm.expectRevert(IReinvestmentController.MaximumInvestAmountExceeded.selector);
         controller.invest(1);
     }
 
@@ -119,14 +107,8 @@ contract InvestTest is ReinvestmentControllerTest {
         assertEq(hub.getAssetLiquidity(ASSET_ID), SUPPLIED - INVESTABLE);
         assertEq(hub.getAddedAssets(ASSET_ID), SUPPLIED);
 
-        assertEq(
-            usdc.allowance(address(controller), address(gatewayWallet)),
-            0
-        );
-        assertEq(
-            gatewayWallet.availableBalance(address(usdc), address(controller)),
-            INVESTABLE
-        );
+        assertEq(usdc.allowance(address(controller), address(gatewayWallet)), 0);
+        assertEq(gatewayWallet.availableBalance(address(usdc), address(controller)), INVESTABLE);
 
         assertEq(controller.getInvestableAmount(), 0);
     }

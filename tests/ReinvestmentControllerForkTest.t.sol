@@ -6,6 +6,13 @@ import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+
+import {AddressLib} from "@circle-gateway/src/lib/AddressLib.sol";
+import {AttestationLib} from "@circle-gateway/src/lib/AttestationLib.sol";
+import {Attestation} from "@circle-gateway/src/lib/Attestations.sol";
+import {TransferSpec, TRANSFER_SPEC_VERSION} from "@circle-gateway/src/lib/TransferSpec.sol";
+
 import {IGatewayMinter} from "../src/interfaces/IGatewayMinter.sol";
 import {IGatewayWallet} from "../src/interfaces/IGatewayWallet.sol";
 import {IHub} from "../src/interfaces/IHub.sol";
@@ -166,6 +173,249 @@ contract ForkInvestTest is ReinvestmentControllerForkTest {
         assertEq(IERC20(USDC).allowance(address(controller), GATEWAY_WALLET), 0);
         assertEq(controller.getInvestableAmount(), investableBefore - amount);
         assertEq(IGatewayWallet(GATEWAY_WALLET).availableBalance(USDC, address(controller)), amount);
+    }
+}
+
+contract ForkWithdrawalFlowTest is ReinvestmentControllerForkTest {
+    /// @notice Thrown by the Gateway wallet when `withdraw` runs before the delay elapses.
+    error WithdrawalNotYetAvailable();
+
+    function test_initiateWithdrawal_successful() public {
+        _setReinvestmentController();
+
+        uint256 amount = controller.getInvestableAmount() / 4;
+        _invest(amount);
+
+        uint256 walletBalanceBefore = IERC20(USDC).balanceOf(GATEWAY_WALLET);
+        uint256 expectedWithdrawalBlock = block.number +
+            GATEWAY_WITHDRAWAL_DELAY;
+
+        vm.expectEmit(address(controller));
+        emit IReinvestmentController.WithdrawalInitiated(amount);
+
+        _initiateWithdrawal(amount);
+
+        assertEq(controller.pendingWithdrawalAmount(), amount);
+        assertEq(_withdrawalBlock(), expectedWithdrawalBlock);
+
+        assertEq(_availableBalance(), 0);
+        assertEq(_withdrawingBalance(), amount);
+
+        assertEq(IERC20(USDC).balanceOf(GATEWAY_WALLET), walletBalanceBefore);
+        assertEq(controller.getInvestedAmount(), amount);
+    }
+
+    function test_withdraw_revertsWith_gatewayDelayNotElapsed() public {
+        _setReinvestmentController();
+
+        uint256 amount = controller.getInvestableAmount() / 4;
+        _invest(amount);
+        _initiateWithdrawal(amount);
+
+        vm.roll(_withdrawalBlock() - 1);
+
+        vm.expectRevert(WithdrawalNotYetAvailable.selector);
+        _withdraw();
+    }
+
+    function test_withdraw_atExactWithdrawalBlock() public {
+        _setReinvestmentController();
+
+        uint256 amount = controller.getInvestableAmount() / 4;
+        _invest(amount);
+        _initiateWithdrawal(amount);
+
+        vm.roll(_withdrawalBlock());
+
+        _withdraw();
+
+        assertEq(controller.pendingWithdrawalAmount(), 0);
+    }
+
+    function test_withdraw_successful() public {
+        _setReinvestmentController();
+
+        uint256 availableLiquidity = IHub(HUB).getAssetLiquidity(assetId);
+        uint256 hubBalanceBefore = IERC20(USDC).balanceOf(HUB);
+        uint256 walletBalanceBefore = IERC20(USDC).balanceOf(GATEWAY_WALLET);
+
+        uint256 amount = controller.getInvestableAmount() / 4;
+        _invest(amount);
+        _initiateWithdrawal(amount);
+
+        vm.roll(_withdrawalBlock() + 1);
+
+        vm.expectEmit(address(controller));
+        emit IReinvestmentController.WithdrawalCompleted(amount);
+
+        _withdraw();
+
+        assertEq(controller.pendingWithdrawalAmount(), 0);
+        assertEq(controller.getInvestedAmount(), 0);
+
+        assertEq(IERC20(USDC).balanceOf(HUB), hubBalanceBefore);
+        assertEq(IERC20(USDC).balanceOf(GATEWAY_WALLET), walletBalanceBefore);
+        assertEq(IERC20(USDC).balanceOf(address(controller)), 0);
+
+        assertEq(IHub(HUB).getAssetLiquidity(assetId), availableLiquidity);
+
+        assertEq(_availableBalance(), 0);
+        assertEq(_withdrawingBalance(), 0);
+        assertEq(_withdrawalBlock(), 0);
+    }
+
+    function _initiateWithdrawal(uint256 amount) internal {
+        vm.prank(EXECUTOR_LVL_1);
+        controller.initiateWithdrawal(amount);
+    }
+
+    function _withdraw() internal {
+        vm.prank(EXECUTOR_LVL_1);
+        controller.withdraw();
+    }
+
+    function _withdrawalBlock() internal view returns (uint256) {
+        return
+            IGatewayWallet(GATEWAY_WALLET).withdrawalBlock(
+                USDC,
+                address(controller)
+            );
+    }
+
+    function _availableBalance() internal view returns (uint256) {
+        return
+            IGatewayWallet(GATEWAY_WALLET).availableBalance(
+                USDC,
+                address(controller)
+            );
+    }
+
+    function _withdrawingBalance() internal view returns (uint256) {
+        return
+            IGatewayWallet(GATEWAY_WALLET).withdrawingBalance(
+                USDC,
+                address(controller)
+            );
+    }
+}
+
+interface IGatewayMinterAdmin {
+    function addAttestationSigner(address signer) external;
+}
+
+contract ForkDivestFlowTest is ReinvestmentControllerForkTest {
+    /// @notice Thrown by the Gateway minter when the attestation signer is not authorized.
+    error InvalidAttestationSigner();
+
+    uint256 public constant ATTESTATION_KEY = 0xA77E57;
+
+    // https://etherscan.io/address/0x3c54FFa14d01EF3A555106007A4fED6E8964aAB6
+    address public constant MINTER_OWNER =
+        0x3c54FFa14d01EF3A555106007A4fED6E8964aAB6;
+
+    function test_divest_revertsWith_unauthorizedAttestationSigner() public {
+        _setReinvestmentController();
+
+        uint256 amount = controller.getInvestableAmount() / 4;
+        _invest(amount);
+
+        bytes memory payload = _attestation(amount);
+        bytes memory signature = _attestationSignature(payload);
+
+        vm.expectRevert(InvalidAttestationSigner.selector);
+        _divest(amount, payload, signature);
+    }
+
+    function test_divest_revertsWith_invalidMintAmount() public {
+        _setReinvestmentController();
+        _authorizeAttestationSigner();
+
+        uint256 amount = controller.getInvestableAmount() / 4;
+        _invest(amount);
+
+        bytes memory payload = _attestation(amount - 1);
+        bytes memory signature = _attestationSignature(payload);
+
+        vm.expectRevert(IReinvestmentController.InvalidMintAmount.selector);
+        _divest(amount, payload, signature);
+    }
+
+    function test_divest_successful() public {
+        _setReinvestmentController();
+        _authorizeAttestationSigner();
+
+        uint256 hubBalanceBefore = IERC20(USDC).balanceOf(HUB);
+
+        uint256 amount = controller.getInvestableAmount() / 4;
+        _invest(amount);
+
+        uint256 supplyBefore = IERC20(USDC).totalSupply();
+
+        bytes memory payload = _attestation(amount);
+        bytes memory signature = _attestationSignature(payload);
+
+        vm.expectEmit(address(controller));
+        emit IReinvestmentController.Divested(amount);
+
+        _divest(amount, payload, signature);
+
+        assertEq(controller.getInvestedAmount(), 0);
+        assertEq(IERC20(USDC).balanceOf(HUB), hubBalanceBefore);
+        assertEq(IERC20(USDC).balanceOf(address(controller)), 0);
+        assertEq(IERC20(USDC).totalSupply(), supplyBefore + amount);
+    }
+
+    function _authorizeAttestationSigner() internal {
+        vm.prank(MINTER_OWNER);
+        IGatewayMinterAdmin(GATEWAY_MINTER).addAttestationSigner(
+            vm.addr(ATTESTATION_KEY)
+        );
+    }
+
+    function _divest(
+        uint256 amount,
+        bytes memory payload,
+        bytes memory signature
+    ) internal {
+        vm.prank(EXECUTOR_LVL_1);
+        controller.divest(amount, payload, signature);
+    }
+
+    function _attestation(uint256 value) internal view returns (bytes memory) {
+        bytes32 self = AddressLib._addressToBytes32(address(controller));
+
+        TransferSpec memory spec = TransferSpec({
+            version: TRANSFER_SPEC_VERSION,
+            sourceDomain: 0,
+            destinationDomain: 0,
+            sourceContract: AddressLib._addressToBytes32(GATEWAY_WALLET),
+            destinationContract: AddressLib._addressToBytes32(GATEWAY_MINTER),
+            sourceToken: AddressLib._addressToBytes32(USDC),
+            destinationToken: AddressLib._addressToBytes32(USDC),
+            sourceDepositor: self,
+            destinationRecipient: self,
+            sourceSigner: self,
+            destinationCaller: bytes32(0),
+            value: value,
+            salt: bytes32(block.number),
+            hookData: ""
+        });
+
+        return
+            AttestationLib.encodeAttestation(
+                Attestation({maxBlockHeight: block.number + 1, spec: spec})
+            );
+    }
+
+    function _attestationSignature(
+        bytes memory payload
+    ) internal pure returns (bytes memory) {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(
+            ATTESTATION_KEY,
+            MessageHashUtils.toEthSignedMessageHash(keccak256(payload))
+        );
+
+        return abi.encodePacked(r, s, v);
     }
 }
 

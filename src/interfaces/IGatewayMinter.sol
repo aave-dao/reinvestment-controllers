@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-BUSL
-pragma solidity 0.8.30;
+pragma solidity 0.8.29;
 
 /// @notice The mint side of Circle's Gateway, deployed as `GatewayMinter`
 /// @dev A separate contract at a separate address from {IGatewayWallet}. `gatewayMint` is

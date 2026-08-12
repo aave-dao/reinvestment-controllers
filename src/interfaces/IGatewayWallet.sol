@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-BUSL
-pragma solidity 0.8.30;
+pragma solidity 0.8.29;
 
 /// @notice The deposit side of Circle's Gateway, deployed as `GatewayWallet`
 /// @dev Holds deposited balances and owns the on-chain withdrawal path. Minting is a

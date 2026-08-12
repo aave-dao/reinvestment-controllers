@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-BUSL
-pragma solidity 0.8.30;
+pragma solidity 0.8.29;
 
 import {IGatewayMinter} from "../../src/interfaces/IGatewayMinter.sol";
 import {MockERC20} from "./MockERC20.sol";

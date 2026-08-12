@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-BUSL
-pragma solidity 0.8.30;
+pragma solidity 0.8.29;
 
 interface IHub {
     /// @notice Asset configuration. Subset of the Hub's `Asset` struct.

@@ -14,6 +14,7 @@ import {BurnIntentLib} from "@circle-gateway/src/lib/BurnIntentLib.sol";
 import {TransferSpecLib} from "@circle-gateway/src/lib/TransferSpecLib.sol";
 import {AddressLib} from "@circle-gateway/src/lib/AddressLib.sol";
 import {Cursor} from "@circle-gateway/src/lib/Cursor.sol";
+import {PercentageMath} from "aave-v4/libraries/math/PercentageMath.sol";
 
 import {IGatewayMinter} from "./interfaces/IGatewayMinter.sol";
 import {IGatewayWallet} from "./interfaces/IGatewayWallet.sol";
@@ -23,15 +24,13 @@ import {IReinvestmentController} from "./interfaces/IReinvestmentController.sol"
 contract ReinvestmentController is IReinvestmentController, Initializable, AccessControlUpgradeable {
     using SafeERC20 for IERC20;
     using TransferSpecLib for bytes29;
+    using PercentageMath for uint256;
 
     /// @inheritdoc IReinvestmentController
     bytes32 public constant INVESTOR_ROLE = keccak256("INVESTOR_ROLE");
 
     /// @inheritdoc IReinvestmentController
     bytes4 public constant ERC1271_MAGIC_VALUE = 0x1626ba7e;
-
-    /// @dev Maximum value of BPS representing 100%
-    uint256 private constant MAX_BPS = 10_000;
 
     /// @inheritdoc IReinvestmentController
     IGatewayWallet public immutable GATEWAY_WALLET;
@@ -273,7 +272,7 @@ contract ReinvestmentController is IReinvestmentController, Initializable, Acces
     /// @dev Sets the minimum amount of buffer that must be left on the Hub uninvested (in BPS)
     /// @param buffer New buffer amount (in BPS)
     function _setBufferBps(uint256 buffer) internal {
-        require(buffer > 0 && buffer < MAX_BPS, InvalidAmount());
+        require(buffer > 0 && buffer < PercentageMath.PERCENTAGE_FACTOR, InvalidAmount());
 
         uint256 oldBufferBps = _bufferBps;
         _bufferBps = buffer;
@@ -292,7 +291,7 @@ contract ReinvestmentController is IReinvestmentController, Initializable, Acces
     /// @dev Sets the maximum amount that can be invested (in BPS)
     /// @dev maxBps New maximum amount (in BPS)
     function _setMaxInvestBps(uint256 maxBps) internal {
-        require(maxBps > 0 && maxBps < MAX_BPS, InvalidAmount());
+        require(maxBps > 0 && maxBps < PercentageMath.PERCENTAGE_FACTOR, InvalidAmount());
 
         uint256 oldMaxInvestBps = _maxInvestBps;
         _maxInvestBps = maxBps;
@@ -304,12 +303,12 @@ contract ReinvestmentController is IReinvestmentController, Initializable, Acces
         uint256 supplied = HUB.getAddedAssets(ASSET_ID);
         uint256 idle = HUB.getAssetLiquidity(ASSET_ID);
         uint256 swept = HUB.getAssetSwept(ASSET_ID);
-        uint256 buffer = (supplied * _bufferBps) / MAX_BPS;
+        uint256 buffer = supplied.percentMulUp(_bufferBps);
 
         if (idle <= buffer) return 0;
 
         uint256 freeIdle = idle - buffer;
-        uint256 capLimit = Math.min(_maxInvest, (supplied * _maxInvestBps) / MAX_BPS);
+        uint256 capLimit = Math.min(_maxInvest, supplied.percentMulDown(_maxInvestBps));
         uint256 capRoom = capLimit > swept ? capLimit - swept : 0;
 
         return Math.min(freeIdle, capRoom);

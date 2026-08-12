@@ -187,8 +187,7 @@ contract ForkWithdrawalFlowTest is ReinvestmentControllerForkTest {
         _invest(amount);
 
         uint256 walletBalanceBefore = IERC20(USDC).balanceOf(GATEWAY_WALLET);
-        uint256 expectedWithdrawalBlock = block.number +
-            GATEWAY_WITHDRAWAL_DELAY;
+        uint256 expectedWithdrawalBlock = block.number + GATEWAY_WITHDRAWAL_DELAY;
 
         vm.expectEmit(address(controller));
         emit IReinvestmentController.WithdrawalInitiated(amount);
@@ -275,27 +274,15 @@ contract ForkWithdrawalFlowTest is ReinvestmentControllerForkTest {
     }
 
     function _withdrawalBlock() internal view returns (uint256) {
-        return
-            IGatewayWallet(GATEWAY_WALLET).withdrawalBlock(
-                USDC,
-                address(controller)
-            );
+        return IGatewayWallet(GATEWAY_WALLET).withdrawalBlock(USDC, address(controller));
     }
 
     function _availableBalance() internal view returns (uint256) {
-        return
-            IGatewayWallet(GATEWAY_WALLET).availableBalance(
-                USDC,
-                address(controller)
-            );
+        return IGatewayWallet(GATEWAY_WALLET).availableBalance(USDC, address(controller));
     }
 
     function _withdrawingBalance() internal view returns (uint256) {
-        return
-            IGatewayWallet(GATEWAY_WALLET).withdrawingBalance(
-                USDC,
-                address(controller)
-            );
+        return IGatewayWallet(GATEWAY_WALLET).withdrawingBalance(USDC, address(controller));
     }
 }
 
@@ -310,8 +297,7 @@ contract ForkDivestFlowTest is ReinvestmentControllerForkTest {
     uint256 public constant ATTESTATION_KEY = 0xA77E57;
 
     // https://etherscan.io/address/0x3c54FFa14d01EF3A555106007A4fED6E8964aAB6
-    address public constant MINTER_OWNER =
-        0x3c54FFa14d01EF3A555106007A4fED6E8964aAB6;
+    address public constant MINTER_OWNER = 0x3c54FFa14d01EF3A555106007A4fED6E8964aAB6;
 
     function test_divest_revertsWith_unauthorizedAttestationSigner() public {
         _setReinvestmentController();
@@ -367,16 +353,10 @@ contract ForkDivestFlowTest is ReinvestmentControllerForkTest {
 
     function _authorizeAttestationSigner() internal {
         vm.prank(MINTER_OWNER);
-        IGatewayMinterAdmin(GATEWAY_MINTER).addAttestationSigner(
-            vm.addr(ATTESTATION_KEY)
-        );
+        IGatewayMinterAdmin(GATEWAY_MINTER).addAttestationSigner(vm.addr(ATTESTATION_KEY));
     }
 
-    function _divest(
-        uint256 amount,
-        bytes memory payload,
-        bytes memory signature
-    ) internal {
+    function _divest(uint256 amount, bytes memory payload, bytes memory signature) internal {
         vm.prank(EXECUTOR_LVL_1);
         controller.divest(amount, payload, signature);
     }
@@ -401,19 +381,12 @@ contract ForkDivestFlowTest is ReinvestmentControllerForkTest {
             hookData: ""
         });
 
-        return
-            AttestationLib.encodeAttestation(
-                Attestation({maxBlockHeight: block.number + 1, spec: spec})
-            );
+        return AttestationLib.encodeAttestation(Attestation({maxBlockHeight: block.number + 1, spec: spec}));
     }
 
-    function _attestationSignature(
-        bytes memory payload
-    ) internal pure returns (bytes memory) {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(
-            ATTESTATION_KEY,
-            MessageHashUtils.toEthSignedMessageHash(keccak256(payload))
-        );
+    function _attestationSignature(bytes memory payload) internal pure returns (bytes memory) {
+        (uint8 v, bytes32 r, bytes32 s) =
+            vm.sign(ATTESTATION_KEY, MessageHashUtils.toEthSignedMessageHash(keccak256(payload)));
 
         return abi.encodePacked(r, s, v);
     }

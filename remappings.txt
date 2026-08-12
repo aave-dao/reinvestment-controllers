@@ -3,3 +3,4 @@ forge-std/=lib/forge-std/src/
 @openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/
 @circle-gateway/=lib/evm-gateway-contracts/
 src/lib/=lib/evm-gateway-contracts/src/lib/
+aave-v4/=lib/aave-v4/src/

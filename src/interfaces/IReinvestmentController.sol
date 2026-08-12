@@ -3,9 +3,9 @@ pragma solidity 0.8.29;
 
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
+import {IHub} from "aave-v4/hub/interfaces/IHub.sol";
 import {IGatewayMinter} from "./IGatewayMinter.sol";
 import {IGatewayWallet} from "./IGatewayWallet.sol";
-import {IHub} from "./IHub.sol";
 
 interface IReinvestmentController is IERC1271 {
     /// @dev Burn intent exceeds the invested amount
@@ -163,10 +163,6 @@ interface IReinvestmentController is IERC1271 {
     /// @return The bytes32 id hash of the INVESTOR_ROLE
     function INVESTOR_ROLE() external view returns (bytes32);
 
-    /// @notice Returns the ERC-1271 magic value returned by a successful isValidSignature call
-    /// @return The bytes4 magic value (0x1626ba7e)
-    function ERC1271_MAGIC_VALUE() external view returns (bytes4);
-
     /// @notice Returns the address of the Circle Gateway wallet, which holds deposits and
     /// serves the on-chain withdrawal path
     /// @return The address of the Gateway wallet
@@ -204,12 +200,12 @@ interface IReinvestmentController is IERC1271 {
     /// `hash`, the recovered signer must hold INVESTOR_ROLE, and the intent itself must pass
     /// the same-chain, token, counterparty and balance checks applied on submission.
     /// Reverts on any failure rather than returning a non-magic selector, so a call that
-    /// returns at all returns ERC1271_MAGIC_VALUE.
+    /// returns at all returns `IERC1271.isValidSignature.selector`.
     /// @param hash The EIP-712 digest the Gateway expects to have been signed
     /// @param signature abi.encode(bytes adminSignature, bytes burnIntentPayload), where
     /// `adminSignature` is an ECDSA signature over `hash` and `burnIntentPayload` is the
     /// burn intent that signature authorizes
-    /// @return ERC1271_MAGIC_VALUE when the signature is valid
+    /// @return `IERC1271.isValidSignature.selector` when the signature is valid
     function isValidSignature(bytes32 hash, bytes calldata signature) external view returns (bytes4);
 
     /// @notice Returns the deposit timelock

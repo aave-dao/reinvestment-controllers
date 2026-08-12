@@ -14,11 +14,11 @@ import {BurnIntentLib} from "@circle-gateway/src/lib/BurnIntentLib.sol";
 import {TransferSpecLib} from "@circle-gateway/src/lib/TransferSpecLib.sol";
 import {AddressLib} from "@circle-gateway/src/lib/AddressLib.sol";
 import {Cursor} from "@circle-gateway/src/lib/Cursor.sol";
+import {IHub} from "aave-v4/hub/interfaces/IHub.sol";
 import {PercentageMath} from "aave-v4/libraries/math/PercentageMath.sol";
 
 import {IGatewayMinter} from "./interfaces/IGatewayMinter.sol";
 import {IGatewayWallet} from "./interfaces/IGatewayWallet.sol";
-import {IHub} from "./interfaces/IHub.sol";
 import {IReinvestmentController} from "./interfaces/IReinvestmentController.sol";
 
 contract ReinvestmentController is IReinvestmentController, Initializable, AccessControlUpgradeable {
@@ -28,9 +28,6 @@ contract ReinvestmentController is IReinvestmentController, Initializable, Acces
 
     /// @inheritdoc IReinvestmentController
     bytes32 public constant INVESTOR_ROLE = keccak256("INVESTOR_ROLE");
-
-    /// @inheritdoc IReinvestmentController
-    bytes4 public constant ERC1271_MAGIC_VALUE = 0x1626ba7e;
 
     /// @inheritdoc IReinvestmentController
     IGatewayWallet public immutable GATEWAY_WALLET;

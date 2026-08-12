@@ -8,6 +8,8 @@ import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol"
 
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
+import {IHub} from "aave-v4/hub/interfaces/IHub.sol";
+
 import {AddressLib} from "@circle-gateway/src/lib/AddressLib.sol";
 import {AttestationLib} from "@circle-gateway/src/lib/AttestationLib.sol";
 import {Attestation} from "@circle-gateway/src/lib/Attestations.sol";
@@ -15,7 +17,6 @@ import {TransferSpec, TRANSFER_SPEC_VERSION} from "@circle-gateway/src/lib/Trans
 
 import {IGatewayMinter} from "../src/interfaces/IGatewayMinter.sol";
 import {IGatewayWallet} from "../src/interfaces/IGatewayWallet.sol";
-import {IHub} from "../src/interfaces/IHub.sol";
 import {ReinvestmentController, IReinvestmentController} from "../src/ReinvestmentController.sol";
 
 contract ReinvestmentControllerForkTest is Test {

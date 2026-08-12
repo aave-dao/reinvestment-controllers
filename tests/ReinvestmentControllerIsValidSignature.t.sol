@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.29;
 
+import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 import {AddressLib} from "@circle-gateway/src/lib/AddressLib.sol";
@@ -200,7 +201,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
 
         assertEq(
             controller.isValidSignature(_digest(payload), _signature(INVESTOR_KEY, payload)),
-            controller.ERC1271_MAGIC_VALUE()
+            IERC1271.isValidSignature.selector
         );
     }
 
@@ -212,7 +213,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
 
         assertEq(
             controller.isValidSignature(_digest(payload), _signature(INVESTOR_KEY, payload)),
-            controller.ERC1271_MAGIC_VALUE()
+            IERC1271.isValidSignature.selector
         );
     }
 
@@ -224,7 +225,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
 
         assertEq(
             controller.isValidSignature(_digest(payload), _signature(INVESTOR_KEY, payload)),
-            controller.ERC1271_MAGIC_VALUE()
+            IERC1271.isValidSignature.selector
         );
     }
 

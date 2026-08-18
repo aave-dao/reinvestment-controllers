@@ -1,4 +1,7 @@
 {
+  "lib/aave-v4": {
+    "rev": "cdacec509e4f848bff1a5556f503afa83eee3b79"
+  },
   "lib/evm-gateway-contracts": {
     "rev": "ee628dc35ee67bc8ad30ba0606cc70888688a3f1"
   },

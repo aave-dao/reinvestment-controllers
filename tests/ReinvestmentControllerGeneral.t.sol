@@ -4,6 +4,7 @@ pragma solidity 0.8.29;
 import {Test} from 'forge-std/Test.sol';
 import {IAccessControl} from '@openzeppelin/contracts/access/IAccessControl.sol';
 import {Initializable} from '@openzeppelin/contracts/proxy/utils/Initializable.sol';
+import {PausableUpgradeable} from '@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol';
 import {TransparentUpgradeableProxy} from '@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol';
 
 import {ReinvestmentController, IReinvestmentController} from '../src/ReinvestmentController.sol';
@@ -165,6 +166,9 @@ contract InitializeTest is ReinvestmentControllerTest {
 
     assertTrue(newController.hasRole(newController.DEFAULT_ADMIN_ROLE(), admin));
     assertTrue(newController.hasRole(newController.INVESTOR_ROLE(), admin));
+    assertTrue(newController.hasRole(newController.PAUSER_ROLE(), admin));
+
+    assertFalse(newController.paused());
 
     assertEq(newController.depositTimelock(), DEPOSIT_TIMELOCK);
     assertEq(newController.gatewayTxLimit(), 10_000_000e6);
@@ -190,6 +194,95 @@ contract InitializeTest is ReinvestmentControllerTest {
     );
 
     return ReinvestmentController(address(newProxy));
+  }
+}
+
+contract PauseTest is ReinvestmentControllerTest {
+  function test_pause_revertsWith_callerIsNotPauser() public {
+    vm.expectRevert(
+      abi.encodeWithSelector(
+        IAccessControl.AccessControlUnauthorizedAccount.selector,
+        address(this),
+        controller.PAUSER_ROLE()
+      )
+    );
+    controller.pause();
+  }
+
+  function test_pause_revertsWith_alreadyPaused() public {
+    vm.prank(admin);
+    controller.pause();
+
+    vm.prank(admin);
+    vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
+    controller.pause();
+  }
+
+  function test_pause_successful() public {
+    vm.expectEmit(address(controller));
+    emit PausableUpgradeable.Paused(admin);
+
+    vm.prank(admin);
+    controller.pause();
+
+    assertTrue(controller.paused());
+  }
+}
+
+contract UnpauseTest is ReinvestmentControllerTest {
+  address public pauser = makeAddr('pauser');
+
+  function test_unpause_revertsWith_callerIsNotAdmin() public {
+    vm.prank(admin);
+    controller.pause();
+
+    vm.expectRevert(
+      abi.encodeWithSelector(
+        IAccessControl.AccessControlUnauthorizedAccount.selector,
+        address(this),
+        controller.DEFAULT_ADMIN_ROLE()
+      )
+    );
+    controller.unpause();
+  }
+
+  function test_unpause_revertsWith_callerIsPauserWithoutAdmin() public {
+    bytes32 role = controller.PAUSER_ROLE();
+
+    vm.prank(admin);
+    controller.grantRole(role, pauser);
+
+    vm.prank(pauser);
+    controller.pause();
+
+    vm.expectRevert(
+      abi.encodeWithSelector(
+        IAccessControl.AccessControlUnauthorizedAccount.selector,
+        pauser,
+        controller.DEFAULT_ADMIN_ROLE()
+      )
+    );
+    vm.prank(pauser);
+    controller.unpause();
+  }
+
+  function test_unpause_revertsWith_notPaused() public {
+    vm.prank(admin);
+    vm.expectRevert(PausableUpgradeable.ExpectedPause.selector);
+    controller.unpause();
+  }
+
+  function test_unpause_successful() public {
+    vm.prank(admin);
+    controller.pause();
+
+    vm.expectEmit(address(controller));
+    emit PausableUpgradeable.Unpaused(admin);
+
+    vm.prank(admin);
+    controller.unpause();
+
+    assertFalse(controller.paused());
   }
 }
 

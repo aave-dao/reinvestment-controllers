@@ -381,7 +381,7 @@ contract ForkDivestFlowTest is ReinvestmentControllerForkTest {
       sourceDepositor: self,
       destinationRecipient: self,
       sourceSigner: self,
-      destinationCaller: bytes32(0),
+      destinationCaller: self,
       value: value,
       salt: bytes32(block.number),
       hookData: ''

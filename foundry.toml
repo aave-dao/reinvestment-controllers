@@ -11,6 +11,3 @@ mainnet = "${RPC_MAINNET}"
 
 [etherscan]
 mainnet = { key = "${ETHERSCAN_API_KEY}", chainId = 1 }
-
-[lint]
-lint_on_build = false

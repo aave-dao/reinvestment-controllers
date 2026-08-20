@@ -23,8 +23,14 @@ interface IReinvestmentController is IERC1271 {
   /// @dev Invalid amount provided
   error InvalidAmount();
 
+  /// @dev Payload must contain exactly one burn intent or attestation
+  error InvalidElementCount();
+
   /// @dev Invalid depositor provided in transfer specification
   error InvalidDepositor();
+
+  /// @dev Invalid destination caller provided in transfer specification
+  error InvalidDestinationCaller();
 
   /// @dev Invalid destination token provided in transfer specification
   error InvalidDestinationToken();
@@ -142,6 +148,15 @@ interface IReinvestmentController is IERC1271 {
   /// @notice Finalizes a pending withdrawal after required time has elapsed
   function withdraw() external;
 
+  /// @notice Halts {invest}, {divest} and {isValidSignature}
+  /// @dev Blocking {isValidSignature} stops the Gateway from burning against this contract's
+  /// balance while paused. Withdrawal paths stay open so funds can always be returned to the Hub
+  function pause() external;
+
+  /// @notice Resumes {invest}, {divest} and {isValidSignature}
+  /// @dev Restricted to DEFAULT_ADMIN_ROLE, so a PAUSER_ROLE holder cannot undo its own halt
+  function unpause() external;
+
   /// @notice Sets a new deposit timelock (in seconds)
   /// @param depositTimelock_ The new deposit timelock amount (in seconds)
   function setDepositTimelock(uint256 depositTimelock_) external;
@@ -166,6 +181,10 @@ interface IReinvestmentController is IERC1271 {
   /// @notice Returns the identifier of the INVESTOR Role
   /// @return The bytes32 id hash of the INVESTOR_ROLE
   function INVESTOR_ROLE() external view returns (bytes32);
+
+  /// @notice Returns the identifier of the PAUSER Role
+  /// @return The bytes32 id hash of the PAUSER_ROLE
+  function PAUSER_ROLE() external view returns (bytes32);
 
   /// @notice Returns the address of the Circle Gateway wallet, which holds deposits and
   /// serves the on-chain withdrawal path

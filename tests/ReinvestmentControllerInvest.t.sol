@@ -2,6 +2,7 @@
 pragma solidity 0.8.29;
 
 import {IAccessControl} from '@openzeppelin/contracts/access/IAccessControl.sol';
+import {PausableUpgradeable} from '@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol';
 import {IReinvestmentController} from '../src/ReinvestmentController.sol';
 
 import {ReinvestmentControllerTest} from './ReinvestmentControllerBase.t.sol';
@@ -27,6 +28,15 @@ contract InvestTest is ReinvestmentControllerTest {
       )
     );
     controller.invest(1e6);
+  }
+
+  function test_invest_revertsWith_paused() public {
+    vm.prank(admin);
+    controller.pause();
+
+    vm.prank(admin);
+    vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
+    controller.invest(INVESTABLE);
   }
 
   function test_invest_revertsWith_depositTimelockNotElapsed() public {

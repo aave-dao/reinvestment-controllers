@@ -4,3 +4,4 @@ forge-std/=lib/forge-std/src/
 @circle-gateway/=lib/evm-gateway-contracts/
 src/lib/=lib/evm-gateway-contracts/src/lib/
 aave-v4/=lib/aave-v4/src/
+lib/aave-v4/:src=lib/aave-v4/src/

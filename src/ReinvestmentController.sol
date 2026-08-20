@@ -5,6 +5,7 @@ import {IERC20} from '@openzeppelin/contracts/interfaces/IERC20.sol';
 import {IERC1271} from '@openzeppelin/contracts/interfaces/IERC1271.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import {AccessControlUpgradeable} from '@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol';
+import {PausableUpgradeable} from '@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol';
 import {Initializable} from '@openzeppelin/contracts/proxy/utils/Initializable.sol';
 import {Math} from '@openzeppelin/contracts/utils/math/Math.sol';
 import {MessageHashUtils} from '@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol';
@@ -24,7 +25,8 @@ import {IReinvestmentController} from './interfaces/IReinvestmentController.sol'
 contract ReinvestmentController is
   IReinvestmentController,
   Initializable,
-  AccessControlUpgradeable
+  AccessControlUpgradeable,
+  PausableUpgradeable
 {
   using SafeERC20 for IERC20;
   using TransferSpecLib for bytes29;
@@ -32,6 +34,9 @@ contract ReinvestmentController is
 
   /// @inheritdoc IReinvestmentController
   bytes32 public constant INVESTOR_ROLE = keccak256('INVESTOR_ROLE');
+
+  /// @inheritdoc IReinvestmentController
+  bytes32 public constant PAUSER_ROLE = keccak256('PAUSER_ROLE');
 
   /// @inheritdoc IReinvestmentController
   IGatewayWallet public immutable GATEWAY_WALLET;
@@ -104,9 +109,11 @@ contract ReinvestmentController is
     require(admin != address(0), InvalidZeroAddress());
 
     __AccessControl_init();
+    __Pausable_init();
 
     _grantRole(DEFAULT_ADMIN_ROLE, admin);
     _grantRole(INVESTOR_ROLE, admin);
+    _grantRole(PAUSER_ROLE, admin);
 
     _setDepositTimelock(depositTimelock_);
     _setGatewayTxLimit(10_000_000e6);
@@ -116,7 +123,7 @@ contract ReinvestmentController is
   }
 
   /// @inheritdoc IReinvestmentController
-  function invest(uint256 amount) external onlyRole(INVESTOR_ROLE) {
+  function invest(uint256 amount) external onlyRole(INVESTOR_ROLE) whenNotPaused {
     require(block.timestamp > _depositLastUpdate + _depositTimelock, DepositTimelock());
     require(amount > 0, InvalidAmount());
     require(amount <= _getInvestableAmount(), MaximumInvestAmountExceeded());
@@ -135,7 +142,7 @@ contract ReinvestmentController is
     uint256 amount,
     bytes memory attestationPayload,
     bytes memory signature
-  ) external onlyRole(INVESTOR_ROLE) {
+  ) external onlyRole(INVESTOR_ROLE) whenNotPaused {
     require(amount > 0 && amount <= _gatewayTxLimit, InvalidAmount());
     require(amount <= _mintableBalance(), InsufficientLiquidity());
 
@@ -175,6 +182,16 @@ contract ReinvestmentController is
     HUB.reclaim(ASSET_ID, amount);
 
     emit WithdrawalCompleted(amount);
+  }
+
+  /// @inheritdoc IReinvestmentController
+  function pause() external onlyRole(PAUSER_ROLE) {
+    _pause();
+  }
+
+  /// @inheritdoc IReinvestmentController
+  function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+    _unpause();
   }
 
   /// @inheritdoc IReinvestmentController
@@ -242,7 +259,10 @@ contract ReinvestmentController is
   }
 
   /// @inheritdoc IReinvestmentController
-  function isValidSignature(bytes32 hash_, bytes memory signature) external view returns (bytes4) {
+  function isValidSignature(
+    bytes32 hash_,
+    bytes memory signature
+  ) external view whenNotPaused returns (bytes4) {
     (bytes memory adminSignature, bytes memory burnIntentPayload) = abi.decode(
       signature,
       (bytes, bytes)
@@ -327,20 +347,13 @@ contract ReinvestmentController is
   /// @param attestationPayload Payload containing signed transfer specification
   /// @param amount Amount of token to withdraw
   function _validateAttestation(bytes memory attestationPayload, uint256 amount) internal view {
-    uint256 toMint = 0;
-
     Cursor memory cursor = AttestationLib.cursor(attestationPayload);
-    bytes29 attestation;
+    require(cursor.numElements == 1, InvalidElementCount());
 
-    while (!cursor.done) {
-      attestation = AttestationLib.next(cursor);
+    bytes29 spec = AttestationLib.getTransferSpec(AttestationLib.next(cursor));
+    _validateTransferSpec(address(USDC), spec);
 
-      bytes29 spec = AttestationLib.getTransferSpec(attestation);
-      _validateTransferSpec(address(USDC), spec);
-      toMint += spec.getValue();
-    }
-
-    require(toMint == amount, InvalidMintAmount());
+    require(spec.getValue() == amount, InvalidMintAmount());
   }
 
   /// @dev Swept funds that are still mintable at the Gateway. An initiated on-chain
@@ -357,21 +370,13 @@ contract ReinvestmentController is
   /// @dev Validates a withdrawal (BurnIntent) prior to signing an attestation
   /// @param burnIntentPayload Payload containing withdrawal specification
   function _validateBurnIntent(bytes memory burnIntentPayload) internal view {
-    uint256 toWithdraw = 0;
-
     Cursor memory cursor = BurnIntentLib.cursor(burnIntentPayload);
-    bytes29 burnIntent;
+    require(cursor.numElements == 1, InvalidElementCount());
 
-    while (!cursor.done) {
-      burnIntent = BurnIntentLib.next(cursor);
+    bytes29 spec = BurnIntentLib.getTransferSpec(BurnIntentLib.next(cursor));
+    _validateTransferSpec(address(USDC), spec);
 
-      bytes29 spec = BurnIntentLib.getTransferSpec(burnIntent);
-
-      _validateTransferSpec(address(USDC), spec);
-      toWithdraw += spec.getValue();
-    }
-
-    require(toWithdraw <= _mintableBalance(), BurnIntentExceedsBalance());
+    require(spec.getValue() <= _mintableBalance(), BurnIntentExceedsBalance());
   }
 
   /// @dev Validates the parameters of a withdrawal (BurnIntent)
@@ -387,5 +392,6 @@ contract ReinvestmentController is
     require(spec.getSourceDepositor() == self, InvalidDepositor());
     require(spec.getDestinationRecipient() == self, InvalidRecipient());
     require(spec.getSourceSigner() == self, InvalidSigner());
+    require(spec.getDestinationCaller() == self, InvalidDestinationCaller());
   }
 }

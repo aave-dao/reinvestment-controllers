@@ -2,6 +2,7 @@
 pragma solidity 0.8.29;
 
 import {IAccessControl} from '@openzeppelin/contracts/access/IAccessControl.sol';
+import {PausableUpgradeable} from '@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol';
 import {AddressLib} from '@circle-gateway/src/lib/AddressLib.sol';
 import {AttestationLib} from '@circle-gateway/src/lib/AttestationLib.sol';
 import {Attestation, AttestationSet} from '@circle-gateway/src/lib/Attestations.sol';
@@ -23,6 +24,17 @@ contract DivestTest is ReinvestmentControllerTest {
         controller.INVESTOR_ROLE()
       )
     );
+    controller.divest(DIVEST_AMOUNT, _attestation(DIVEST_AMOUNT), '');
+  }
+
+  function test_divest_revertsWith_paused() public {
+    _invest(INVESTABLE);
+
+    vm.prank(admin);
+    controller.pause();
+
+    vm.prank(admin);
+    vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
     controller.divest(DIVEST_AMOUNT, _attestation(DIVEST_AMOUNT), '');
   }
 
@@ -155,6 +167,17 @@ contract DivestTest is ReinvestmentControllerTest {
     controller.divest(DIVEST_AMOUNT, _encode(spec), '');
   }
 
+  function test_divest_revertsWith_invalidDestinationCaller() public {
+    _invest(INVESTABLE);
+
+    TransferSpec memory spec = _transferSpec(DIVEST_AMOUNT);
+    spec.destinationCaller = bytes32(0);
+
+    vm.prank(admin);
+    vm.expectRevert(IReinvestmentController.InvalidDestinationCaller.selector);
+    controller.divest(DIVEST_AMOUNT, _encode(spec), '');
+  }
+
   function test_divest_revertsWith_attestationValueBelowAmount() public {
     _invest(INVESTABLE);
 
@@ -171,28 +194,14 @@ contract DivestTest is ReinvestmentControllerTest {
     controller.divest(DIVEST_AMOUNT, _attestation(DIVEST_AMOUNT + 1), '');
   }
 
-  function test_divest_revertsWith_attestationSetNotSummingToAmount() public {
-    _invest(INVESTABLE);
-
-    bytes memory payload = _attestationSet(DIVEST_AMOUNT / 4, DIVEST_AMOUNT / 4);
-
-    vm.prank(admin);
-    vm.expectRevert(IReinvestmentController.InvalidMintAmount.selector);
-    controller.divest(DIVEST_AMOUNT, payload, '');
-  }
-
-  function test_divest_attestationSetSummingToAmount() public {
+  function test_divest_revertsWith_attestationSet() public {
     _invest(INVESTABLE);
 
     bytes memory payload = _attestationSet(DIVEST_AMOUNT / 4, (DIVEST_AMOUNT * 3) / 4);
 
-    _burnAtGateway(DIVEST_AMOUNT);
-    gatewayMinter.setNextMint(address(usdc), DIVEST_AMOUNT);
-
     vm.prank(admin);
+    vm.expectRevert(IReinvestmentController.InvalidElementCount.selector);
     controller.divest(DIVEST_AMOUNT, payload, '');
-
-    assertEq(controller.getInvestedAmount(), INVESTABLE - DIVEST_AMOUNT);
   }
 
   function test_divest_atGatewayTxLimit() public {
@@ -288,7 +297,7 @@ contract DivestTest is ReinvestmentControllerTest {
         sourceDepositor: self,
         destinationRecipient: self,
         sourceSigner: self,
-        destinationCaller: bytes32(0),
+        destinationCaller: self,
         value: value,
         salt: bytes32(uint256(1)),
         hookData: ''

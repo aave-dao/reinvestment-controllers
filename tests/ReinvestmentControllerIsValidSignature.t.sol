@@ -2,6 +2,7 @@
 pragma solidity 0.8.29;
 
 import {IERC1271} from '@openzeppelin/contracts/interfaces/IERC1271.sol';
+import {PausableUpgradeable} from '@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol';
 import {MessageHashUtils} from '@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol';
 
 import {AddressLib} from '@circle-gateway/src/lib/AddressLib.sol';
@@ -19,6 +20,22 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
 
   address public investor = vm.addr(INVESTOR_KEY);
   address public outsider = vm.addr(OUTSIDER_KEY);
+
+  function test_isValidSignature_revertsWith_paused() public {
+    _grantInvestorRole();
+    _invest(INVESTABLE);
+
+    bytes memory payload = _burnIntent(WITHDRAW_AMOUNT);
+
+    bytes32 digest = _digest(payload);
+    bytes memory sig = _signature(INVESTOR_KEY, payload);
+
+    vm.prank(admin);
+    controller.pause();
+
+    vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
+    controller.isValidSignature(digest, sig);
+  }
 
   function test_isValidSignature_revertsWith_hashMismatch() public {
     _grantInvestorRole();
@@ -151,6 +168,21 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
     controller.isValidSignature(digest, sig);
   }
 
+  function test_isValidSignature_revertsWith_invalidDestinationCaller() public {
+    _grantInvestorRole();
+    _invest(INVESTABLE);
+
+    TransferSpec memory spec = _transferSpec(WITHDRAW_AMOUNT);
+    spec.destinationCaller = bytes32(0);
+    bytes memory payload = _encode(spec);
+
+    bytes32 digest = _digest(payload);
+    bytes memory sig = _signature(INVESTOR_KEY, payload);
+
+    vm.expectRevert(IReinvestmentController.InvalidDestinationCaller.selector);
+    controller.isValidSignature(digest, sig);
+  }
+
   function test_isValidSignature_revertsWith_burnIntentExceedsBalance() public {
     _grantInvestorRole();
     _invest(INVESTABLE);
@@ -180,29 +212,17 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
     controller.isValidSignature(digest, sig);
   }
 
-  function test_isValidSignature_revertsWith_setExceedingBalance() public {
-    _grantInvestorRole();
-    _invest(INVESTABLE);
-
-    bytes memory payload = _burnIntentSet(INVESTABLE, 1);
-
-    bytes32 digest = _digest(payload);
-    bytes memory sig = _signature(INVESTOR_KEY, payload);
-
-    vm.expectRevert(IReinvestmentController.BurnIntentExceedsBalance.selector);
-    controller.isValidSignature(digest, sig);
-  }
-
-  function test_isValidSignature_burnIntentSetWithinBalance() public {
+  function test_isValidSignature_revertsWith_burnIntentSet() public {
     _grantInvestorRole();
     _invest(INVESTABLE);
 
     bytes memory payload = _burnIntentSet(WITHDRAW_AMOUNT, WITHDRAW_AMOUNT);
 
-    assertEq(
-      controller.isValidSignature(_digest(payload), _signature(INVESTOR_KEY, payload)),
-      IERC1271.isValidSignature.selector
-    );
+    bytes32 digest = _digest(payload);
+    bytes memory sig = _signature(INVESTOR_KEY, payload);
+
+    vm.expectRevert(IReinvestmentController.InvalidElementCount.selector);
+    controller.isValidSignature(digest, sig);
   }
 
   function test_isValidSignature_atFullMintableBalance() public {
@@ -251,7 +271,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
         sourceDepositor: self,
         destinationRecipient: self,
         sourceSigner: self,
-        destinationCaller: bytes32(0),
+        destinationCaller: self,
         value: value,
         salt: bytes32(uint256(1)),
         hookData: ''

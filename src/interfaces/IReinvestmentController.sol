@@ -73,11 +73,6 @@ interface IReinvestmentController is IERC1271 {
   /// @param amount The amount of funds divested
   event Divested(uint256 amount);
 
-  /// @dev Emitted when the Gateway transaction limit is updated
-  /// @param oldLimit The old transaction limit
-  /// @param limit The new transaction limit
-  event SetGatewayTxLimit(uint256 oldLimit, uint256 limit);
-
   /// @dev Emitted when the deposit timelock is updated
   /// @param oldDepositTimelock The old deposit timelock
   /// @param depositTimelock The new deposit timelock
@@ -125,12 +120,12 @@ interface IReinvestmentController is IERC1271 {
   ) external;
 
   /// @notice Invests amount of funds into USDC Gateway
-  /// @dev Amount can be greater than Gateway transaction limit
   /// @param amount Amount of USDC to invest
   function invest(uint256 amount) external;
 
   /// @notice Divests amount of funds from USDC Gateway
-  /// @dev Cannot exceeds Gateway transaction limit
+  /// @dev Bounded only by the swept balance. Circle caps attestation size off-chain, and the
+  /// Gateway contracts impose no on-chain limit
   /// @param amount The amount of funds to withdraw
   /// @param attestationPayload The specification of the withdrawal
   /// @param signature The signature that validates attestation was originated by authorized entity
@@ -163,10 +158,6 @@ interface IReinvestmentController is IERC1271 {
   /// @notice Sets a new deposit timelock (in seconds)
   /// @param depositTimelock_ The new deposit timelock amount (in seconds)
   function setDepositTimelock(uint256 depositTimelock_) external;
-
-  /// @notice Sets the Circle Gateway's transaction limit
-  /// @param limit The new transaction limit
-  function setGatewayTxLimit(uint256 limit) external;
 
   /// @dev Sets the minimum amount of buffer that must be left on the Hub uninvested (in BPS)
   /// @param buffer New buffer amount (in BPS)
@@ -237,10 +228,6 @@ interface IReinvestmentController is IERC1271 {
   /// @notice Returns the deposit timelock
   /// @return The timelock (in seconds)
   function depositTimelock() external view returns (uint256);
-
-  /// @notice Returns the Circle USDC Gateway transaction limit for instant withdrawals
-  /// @return The transaction size limit
-  function gatewayTxLimit() external view returns (uint256);
 
   /// @notice Returns the maximum amount that can be invested (in absolute terms) at any time
   /// @dev Can be set to zero to sunset ReinvestmentController

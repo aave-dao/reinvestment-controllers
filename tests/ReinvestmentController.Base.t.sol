@@ -12,7 +12,7 @@ import {MockGatewayMinter} from './mocks/MockGatewayMinter.sol';
 import {MockGatewayWallet} from './mocks/MockGatewayWallet.sol';
 import {MockHub} from './mocks/MockHub.sol';
 
-contract ReinvestmentControllerTest is Test {
+contract ReinvestmentControllerTestBase is Test {
   uint256 public constant ASSET_ID = 1;
 
   uint256 public constant DEPOSIT_TIMELOCK = 1 days;

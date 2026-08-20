@@ -59,9 +59,6 @@ contract ReinvestmentController is
   /// @dev Timestamp of last deposit
   uint256 private _depositLastUpdate;
 
-  /// @dev Transaction size limit imposed by Gateway for instant withdrawals
-  uint256 private _gatewayTxLimit;
-
   /// @dev Buffer of uninvested funds on Hub (in BPS)
   uint256 private _bufferBps;
 
@@ -116,7 +113,6 @@ contract ReinvestmentController is
     _grantRole(PAUSER_ROLE, admin);
 
     _setDepositTimelock(depositTimelock_);
-    _setGatewayTxLimit(10_000_000e6);
     _setMaxInvest(maxInvest_);
     _setMaxInvestBps(maxInvestBps_);
     _setBufferBps(bufferBps_);
@@ -143,7 +139,7 @@ contract ReinvestmentController is
     bytes memory attestationPayload,
     bytes memory signature
   ) external onlyRole(INVESTOR_ROLE) whenNotPaused {
-    require(amount > 0 && amount <= _gatewayTxLimit, InvalidAmount());
+    require(amount > 0, InvalidAmount());
     require(amount <= HUB.getAssetSwept(ASSET_ID), InsufficientLiquidity());
 
     _validateAttestation(attestationPayload, amount);
@@ -208,11 +204,6 @@ contract ReinvestmentController is
   }
 
   /// @inheritdoc IReinvestmentController
-  function setGatewayTxLimit(uint256 limit) external onlyRole(DEFAULT_ADMIN_ROLE) {
-    _setGatewayTxLimit(limit);
-  }
-
-  /// @inheritdoc IReinvestmentController
   function setBufferBps(uint256 bufferBps_) external onlyRole(DEFAULT_ADMIN_ROLE) {
     _setBufferBps(bufferBps_);
   }
@@ -240,11 +231,6 @@ contract ReinvestmentController is
   /// @inheritdoc IReinvestmentController
   function depositTimelock() external view returns (uint256) {
     return _depositTimelock;
-  }
-
-  /// @inheritdoc IReinvestmentController
-  function gatewayTxLimit() external view returns (uint256) {
-    return _gatewayTxLimit;
   }
 
   /// @inheritdoc IReinvestmentController
@@ -296,14 +282,6 @@ contract ReinvestmentController is
     uint256 oldDepositTimelock = _depositTimelock;
     _depositTimelock = depositTimelock_;
     emit SetDepositTimelock(oldDepositTimelock, depositTimelock_);
-  }
-
-  /// @dev Sets the Circle Gateway's transaction limit
-  /// @param limit The new transaction limit
-  function _setGatewayTxLimit(uint256 limit) internal {
-    uint256 oldLimit = _gatewayTxLimit;
-    _gatewayTxLimit = limit;
-    emit SetGatewayTxLimit(oldLimit, limit);
   }
 
   /// @dev Sets the minimum amount of buffer that must be left on the Hub uninvested (in BPS)

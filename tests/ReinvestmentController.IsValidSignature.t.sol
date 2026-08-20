@@ -11,9 +11,9 @@ import {BurnIntent, BurnIntentSet} from '@circle-gateway/src/lib/BurnIntents.sol
 import {TransferSpec, TRANSFER_SPEC_VERSION} from '@circle-gateway/src/lib/TransferSpec.sol';
 
 import {IReinvestmentController} from '../src/ReinvestmentController.sol';
-import {ReinvestmentControllerTest} from './ReinvestmentControllerBase.t.sol';
+import {ReinvestmentControllerTestBase} from './ReinvestmentController.Base.t.sol';
 
-contract IsValidSignatureTest is ReinvestmentControllerTest {
+contract ReinvestmentControllerIsValidSignatureTest is ReinvestmentControllerTestBase {
   uint256 public constant INVESTOR_KEY = 0xA11CE;
   uint256 public constant OUTSIDER_KEY = 0xB0B;
   uint256 public constant WITHDRAW_AMOUNT = 100_000e6;
@@ -21,7 +21,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
   address public investor = vm.addr(INVESTOR_KEY);
   address public outsider = vm.addr(OUTSIDER_KEY);
 
-  function test_isValidSignature_revertsWith_paused() public {
+  function test_isValidSignature_revertsWith_EnforcedPause() public {
     _grantInvestorRole();
     _invest(INVESTABLE);
 
@@ -37,7 +37,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
     controller.isValidSignature(digest, sig);
   }
 
-  function test_isValidSignature_revertsWith_hashMismatch() public {
+  function test_isValidSignature_revertsWith_HashMismatch() public {
     _grantInvestorRole();
     _invest(INVESTABLE);
 
@@ -48,7 +48,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
     controller.isValidSignature(keccak256('bad-digest'), sig);
   }
 
-  function test_isValidSignature_revertsWith_signerLacksInvestorRole() public {
+  function test_isValidSignature_revertsWith_InvalidSignature_signerLacksRole() public {
     _invest(INVESTABLE);
 
     bytes memory payload = _burnIntent(WITHDRAW_AMOUNT);
@@ -60,7 +60,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
     controller.isValidSignature(digest, sig);
   }
 
-  function test_isValidSignature_revertsWith_investorRoleRevoked() public {
+  function test_isValidSignature_revertsWith_InvalidSignature_roleRevoked() public {
     _grantInvestorRole();
     _invest(INVESTABLE);
 
@@ -78,7 +78,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
     controller.isValidSignature(digest, sig);
   }
 
-  function test_isValidSignature_revertsWith_crossChainTransferNotAllowed() public {
+  function test_isValidSignature_revertsWith_CrossChainTransferNotAllowed() public {
     _grantInvestorRole();
     _invest(INVESTABLE);
 
@@ -93,7 +93,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
     controller.isValidSignature(digest, sig);
   }
 
-  function test_isValidSignature_revertsWith_invalidSourceToken() public {
+  function test_isValidSignature_revertsWith_InvalidSourceToken() public {
     _grantInvestorRole();
     _invest(INVESTABLE);
 
@@ -108,7 +108,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
     controller.isValidSignature(digest, sig);
   }
 
-  function test_isValidSignature_revertsWith_invalidDestinationToken() public {
+  function test_isValidSignature_revertsWith_InvalidDestinationToken() public {
     _grantInvestorRole();
     _invest(INVESTABLE);
 
@@ -123,7 +123,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
     controller.isValidSignature(digest, sig);
   }
 
-  function test_isValidSignature_revertsWith_invalidDepositor() public {
+  function test_isValidSignature_revertsWith_InvalidDepositor() public {
     _grantInvestorRole();
     _invest(INVESTABLE);
 
@@ -138,7 +138,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
     controller.isValidSignature(digest, sig);
   }
 
-  function test_isValidSignature_revertsWith_invalidRecipient() public {
+  function test_isValidSignature_revertsWith_InvalidRecipient() public {
     _grantInvestorRole();
     _invest(INVESTABLE);
 
@@ -153,7 +153,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
     controller.isValidSignature(digest, sig);
   }
 
-  function test_isValidSignature_revertsWith_invalidSigner() public {
+  function test_isValidSignature_revertsWith_InvalidSigner() public {
     _grantInvestorRole();
     _invest(INVESTABLE);
 
@@ -168,7 +168,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
     controller.isValidSignature(digest, sig);
   }
 
-  function test_isValidSignature_revertsWith_invalidDestinationCaller() public {
+  function test_isValidSignature_revertsWith_InvalidDestinationCaller() public {
     _grantInvestorRole();
     _invest(INVESTABLE);
 
@@ -183,7 +183,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
     controller.isValidSignature(digest, sig);
   }
 
-  function test_isValidSignature_revertsWith_burnIntentExceedsBalance() public {
+  function test_isValidSignature_revertsWith_BurnIntentExceedsBalance() public {
     _grantInvestorRole();
     _invest(INVESTABLE);
 
@@ -196,7 +196,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
     controller.isValidSignature(digest, sig);
   }
 
-  function test_isValidSignature_revertsWith_burnIntentSet() public {
+  function test_isValidSignature_revertsWith_InvalidElementCount() public {
     _grantInvestorRole();
     _invest(INVESTABLE);
 
@@ -221,7 +221,7 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
     );
   }
 
-  function test_isValidSignature_successful() public {
+  function test_isValidSignature() public {
     _grantInvestorRole();
     _invest(INVESTABLE);
 

@@ -19,7 +19,7 @@ import {IGatewayMinter} from '../src/interfaces/IGatewayMinter.sol';
 import {IGatewayWallet} from '../src/interfaces/IGatewayWallet.sol';
 import {ReinvestmentController, IReinvestmentController} from '../src/ReinvestmentController.sol';
 
-contract ReinvestmentControllerForkTest is Test {
+contract ReinvestmentControllerForkTestBase is Test {
   // https://etherscan.io/address/0x77777777Dcc4d5A8B6E418Fd04D8997ef11000eE
   address public constant GATEWAY_WALLET = 0x77777777Dcc4d5A8B6E418Fd04D8997ef11000eE;
 
@@ -84,11 +84,11 @@ contract ReinvestmentControllerForkTest is Test {
   }
 }
 
-contract ForkInvestTest is ReinvestmentControllerForkTest {
+contract ReinvestmentControllerForkInvestTest is ReinvestmentControllerForkTestBase {
   /// @notice Thrown when an invalid reinvestment controller attempts to perform a `sweep` action.
   error OnlyReinvestmentController();
 
-  function test_invest_revertsWith_unauthorizedUser() public {
+  function test_invest_revertsWith_AccessControlUnauthorizedAccount() public {
     vm.expectRevert(
       abi.encodeWithSelector(
         IAccessControl.AccessControlUnauthorizedAccount.selector,
@@ -99,12 +99,12 @@ contract ForkInvestTest is ReinvestmentControllerForkTest {
     controller.invest(100_000e6);
   }
 
-  function test_invest_revertsWith_notReinvestmentController() public {
+  function test_invest_revertsWith_OnlyReinvestmentController() public {
     vm.expectRevert(OnlyReinvestmentController.selector);
     _invest(100_000e6);
   }
 
-  function test_invest_revertsWith_amountExceedsInvestable() public {
+  function test_invest_revertsWith_MaximumInvestAmountExceeded() public {
     _setReinvestmentController();
 
     uint256 amount = controller.getInvestableAmount() + 1;
@@ -152,7 +152,7 @@ contract ForkInvestTest is ReinvestmentControllerForkTest {
     );
   }
 
-  function test_invest_successful(uint256 amount) public {
+  function test_invest(uint256 amount) public {
     _setReinvestmentController();
 
     uint256 availableLiquidity = IHub(HUB).getAssetLiquidity(assetId);
@@ -182,11 +182,11 @@ contract ForkInvestTest is ReinvestmentControllerForkTest {
   }
 }
 
-contract ForkWithdrawalFlowTest is ReinvestmentControllerForkTest {
+contract ReinvestmentControllerForkWithdrawalTest is ReinvestmentControllerForkTestBase {
   /// @notice Thrown by the Gateway wallet when `withdraw` runs before the delay elapses.
   error WithdrawalNotYetAvailable();
 
-  function test_initiateWithdrawal_successful() public {
+  function test_initiateWithdrawal() public {
     _setReinvestmentController();
 
     uint256 amount = controller.getInvestableAmount() / 4;
@@ -211,7 +211,7 @@ contract ForkWithdrawalFlowTest is ReinvestmentControllerForkTest {
     assertEq(controller.getInvestedAmount(), amount);
   }
 
-  function test_withdraw_revertsWith_gatewayDelayNotElapsed() public {
+  function test_withdraw_revertsWith_WithdrawalNotYetAvailable() public {
     _setReinvestmentController();
 
     uint256 amount = controller.getInvestableAmount() / 4;
@@ -238,7 +238,7 @@ contract ForkWithdrawalFlowTest is ReinvestmentControllerForkTest {
     _withdraw();
   }
 
-  function test_withdraw_successful() public {
+  function test_withdraw() public {
     _setReinvestmentController();
 
     uint256 availableLiquidity = IHub(HUB).getAssetLiquidity(assetId);
@@ -302,7 +302,7 @@ interface IGatewayMinterAdmin {
   function addAttestationSigner(address signer) external;
 }
 
-contract ForkDivestFlowTest is ReinvestmentControllerForkTest {
+contract ReinvestmentControllerForkDivestTest is ReinvestmentControllerForkTestBase {
   /// @notice Thrown by the Gateway minter when the attestation signer is not authorized.
   error InvalidAttestationSigner();
 
@@ -311,7 +311,7 @@ contract ForkDivestFlowTest is ReinvestmentControllerForkTest {
   // https://etherscan.io/address/0x3c54FFa14d01EF3A555106007A4fED6E8964aAB6
   address public constant MINTER_OWNER = 0x3c54FFa14d01EF3A555106007A4fED6E8964aAB6;
 
-  function test_divest_revertsWith_unauthorizedAttestationSigner() public {
+  function test_divest_revertsWith_InvalidAttestationSigner() public {
     _setReinvestmentController();
 
     uint256 amount = controller.getInvestableAmount() / 4;
@@ -324,7 +324,7 @@ contract ForkDivestFlowTest is ReinvestmentControllerForkTest {
     _divest(amount, payload, signature);
   }
 
-  function test_divest_revertsWith_invalidMintAmount() public {
+  function test_divest_revertsWith_InvalidMintAmount() public {
     _setReinvestmentController();
     _authorizeAttestationSigner();
 
@@ -338,7 +338,7 @@ contract ForkDivestFlowTest is ReinvestmentControllerForkTest {
     _divest(amount, payload, signature);
   }
 
-  function test_divest_successful() public {
+  function test_divest() public {
     _setReinvestmentController();
     _authorizeAttestationSigner();
 
@@ -407,7 +407,7 @@ contract ForkDivestFlowTest is ReinvestmentControllerForkTest {
   }
 }
 
-contract ForkPreconditionsTest is ReinvestmentControllerForkTest {
+contract ReinvestmentControllerForkPreconditionsTest is ReinvestmentControllerForkTestBase {
   function test_preconditions_assetHasNoReinvestmentController() public view {
     assertEq(IHub(HUB).getAssetConfig(assetId).reinvestmentController, address(0));
     assertEq(IHub(HUB).getAssetSwept(assetId), 0);

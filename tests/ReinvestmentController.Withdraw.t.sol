@@ -6,12 +6,12 @@ import {PausableUpgradeable} from '@openzeppelin/contracts-upgradeable/utils/Pau
 
 import {IReinvestmentController} from '../src/ReinvestmentController.sol';
 import {MockGatewayWallet} from './mocks/MockGatewayWallet.sol';
-import {ReinvestmentControllerTest} from './ReinvestmentControllerBase.t.sol';
+import {ReinvestmentControllerTestBase} from './ReinvestmentController.Base.t.sol';
 
 uint256 constant GATEWAY_WITHDRAWAL_DELAY = 50_400;
 
-contract InitiateWithdrawalTest is ReinvestmentControllerTest {
-  function test_initiateWithdrawal_revertsWith_callerIsNotAdmin() public {
+contract ReinvestmentControllerInitiateWithdrawalTest is ReinvestmentControllerTestBase {
+  function test_initiateWithdrawal_revertsWith_AccessControlUnauthorizedAccount() public {
     _invest(INVESTABLE);
     _pause();
 
@@ -25,7 +25,7 @@ contract InitiateWithdrawalTest is ReinvestmentControllerTest {
     controller.initiateWithdrawal();
   }
 
-  function test_initiateWithdrawal_revertsWith_notPaused() public {
+  function test_initiateWithdrawal_revertsWith_ExpectedPause() public {
     _invest(INVESTABLE);
 
     vm.prank(admin);
@@ -33,7 +33,7 @@ contract InitiateWithdrawalTest is ReinvestmentControllerTest {
     controller.initiateWithdrawal();
   }
 
-  function test_initiateWithdrawal_revertsWith_nothingInvested() public {
+  function test_initiateWithdrawal_revertsWith_InvalidAmount() public {
     _pause();
 
     vm.prank(admin);
@@ -41,7 +41,7 @@ contract InitiateWithdrawalTest is ReinvestmentControllerTest {
     controller.initiateWithdrawal();
   }
 
-  function test_initiateWithdrawal_revertsWith_insufficientLiquidity() public {
+  function test_initiateWithdrawal_revertsWith_InsufficientLiquidity() public {
     _invest(INVESTABLE);
     hub.setSwept(ASSET_ID, INVESTABLE - 1);
     _pause();
@@ -51,7 +51,7 @@ contract InitiateWithdrawalTest is ReinvestmentControllerTest {
     controller.initiateWithdrawal();
   }
 
-  function test_initiateWithdrawal_revertsWith_withdrawalInProcess() public {
+  function test_initiateWithdrawal_revertsWith_WithdrawalInProcess() public {
     _invest(INVESTABLE);
     _pause();
 
@@ -63,7 +63,7 @@ contract InitiateWithdrawalTest is ReinvestmentControllerTest {
     controller.initiateWithdrawal();
   }
 
-  function test_initiateWithdrawal_successful() public {
+  function test_initiateWithdrawal() public {
     _invest(INVESTABLE);
     _pause();
 
@@ -88,8 +88,8 @@ contract InitiateWithdrawalTest is ReinvestmentControllerTest {
   }
 }
 
-contract WithdrawTest is ReinvestmentControllerTest {
-  function test_withdraw_revertsWith_callerIsNotAdmin() public {
+contract ReinvestmentControllerWithdrawTest is ReinvestmentControllerTestBase {
+  function test_withdraw_revertsWith_AccessControlUnauthorizedAccount() public {
     _invest(INVESTABLE);
     _pause();
     _initiateWithdrawal();
@@ -106,7 +106,7 @@ contract WithdrawTest is ReinvestmentControllerTest {
     controller.withdraw();
   }
 
-  function test_withdraw_revertsWith_noWithdrawalInProcess() public {
+  function test_withdraw_revertsWith_NoWithdrawalInProcess() public {
     _invest(INVESTABLE);
 
     vm.prank(admin);
@@ -114,7 +114,7 @@ contract WithdrawTest is ReinvestmentControllerTest {
     controller.withdraw();
   }
 
-  function test_withdraw_revertsWith_gatewayDelayNotElapsed() public {
+  function test_withdraw_revertsWith_WithdrawalNotYetAvailable() public {
     _invest(INVESTABLE);
     _pause();
     _initiateWithdrawal();
@@ -153,7 +153,7 @@ contract WithdrawTest is ReinvestmentControllerTest {
     assertEq(controller.getInvestedAmount(), 0);
   }
 
-  function test_withdraw_successful() public {
+  function test_withdraw() public {
     _invest(INVESTABLE);
     _pause();
     _initiateWithdrawal();
@@ -182,5 +182,35 @@ contract WithdrawTest is ReinvestmentControllerTest {
   function _initiateWithdrawal() internal {
     vm.prank(admin);
     controller.initiateWithdrawal();
+  }
+
+  function test_withdraw_revertsWith_WithdrawalNotYetAvailable_beforeDelay(
+    uint256 blockNumber
+  ) public {
+    _invest(INVESTABLE);
+    _pause();
+    _initiateWithdrawal();
+
+    blockNumber = bound(blockNumber, block.number, _withdrawalBlock() - 1);
+    vm.roll(blockNumber);
+
+    vm.prank(admin);
+    vm.expectRevert(MockGatewayWallet.WithdrawalNotYetAvailable.selector);
+    controller.withdraw();
+  }
+
+  function test_withdraw_atOrAfterDelay(uint256 blockNumber) public {
+    _invest(INVESTABLE);
+    _pause();
+    _initiateWithdrawal();
+
+    blockNumber = bound(blockNumber, _withdrawalBlock(), _withdrawalBlock() + 1_000_000);
+    vm.roll(blockNumber);
+
+    vm.prank(admin);
+    controller.withdraw();
+
+    assertEq(controller.getInvestedAmount(), 0);
+    assertEq(usdc.balanceOf(address(hub)), SUPPLIED);
   }
 }

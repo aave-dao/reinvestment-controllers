@@ -5,10 +5,10 @@ import {IAccessControl} from '@openzeppelin/contracts/access/IAccessControl.sol'
 import {PausableUpgradeable} from '@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol';
 import {IReinvestmentController} from '../src/ReinvestmentController.sol';
 
-import {ReinvestmentControllerTest} from './ReinvestmentControllerBase.t.sol';
+import {ReinvestmentControllerTestBase} from './ReinvestmentController.Base.t.sol';
 
-contract InvestTest is ReinvestmentControllerTest {
-  function test_invest_revertsWith_callerIsNotInvestorBeforeAmountCheck() public {
+contract ReinvestmentControllerInvestTest is ReinvestmentControllerTestBase {
+  function test_invest_revertsWith_AccessControlUnauthorizedAccount_beforeAmountCheck() public {
     vm.expectRevert(
       abi.encodeWithSelector(
         IAccessControl.AccessControlUnauthorizedAccount.selector,
@@ -19,7 +19,7 @@ contract InvestTest is ReinvestmentControllerTest {
     controller.invest(0);
   }
 
-  function test_invest_revertsWith_callerIsNotInvestor() public {
+  function test_invest_revertsWith_AccessControlUnauthorizedAccount() public {
     vm.expectRevert(
       abi.encodeWithSelector(
         IAccessControl.AccessControlUnauthorizedAccount.selector,
@@ -30,7 +30,7 @@ contract InvestTest is ReinvestmentControllerTest {
     controller.invest(1e6);
   }
 
-  function test_invest_revertsWith_paused() public {
+  function test_invest_revertsWith_EnforcedPause() public {
     vm.prank(admin);
     controller.pause();
 
@@ -39,7 +39,7 @@ contract InvestTest is ReinvestmentControllerTest {
     controller.invest(INVESTABLE);
   }
 
-  function test_invest_revertsWith_depositTimelockNotElapsed() public {
+  function test_invest_revertsWith_DepositTimelock() public {
     _invest(1_000e6);
 
     vm.prank(admin);
@@ -47,7 +47,7 @@ contract InvestTest is ReinvestmentControllerTest {
     controller.invest(1_000e6);
   }
 
-  function test_invest_revertsWith_depositTimelockAtExactBoundary() public {
+  function test_invest_revertsWith_DepositTimelock_atExactBoundary() public {
     _invest(1_000e6);
 
     vm.warp(block.timestamp + DEPOSIT_TIMELOCK);
@@ -57,19 +57,19 @@ contract InvestTest is ReinvestmentControllerTest {
     controller.invest(1_000e6);
   }
 
-  function test_invest_revertsWith_invalidAmount() public {
+  function test_invest_revertsWith_InvalidAmount() public {
     vm.prank(admin);
     vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
     controller.invest(0);
   }
 
-  function test_invest_revertsWith_amountExceedsInvestable() public {
+  function test_invest_revertsWith_MaximumInvestAmountExceeded() public {
     vm.prank(admin);
     vm.expectRevert(IReinvestmentController.MaximumInvestAmountExceeded.selector);
     controller.invest(INVESTABLE + 1);
   }
 
-  function test_invest_revertsWith_idleLiquidityAtBuffer() public {
+  function test_invest_revertsWith_MaximumInvestAmountExceeded_idleAtBuffer() public {
     hub.setLiquidity(ASSET_ID, (SUPPLIED * BUFFER_BPS) / 10_000);
 
     assertEq(controller.getInvestableAmount(), 0);
@@ -79,7 +79,7 @@ contract InvestTest is ReinvestmentControllerTest {
     controller.invest(1);
   }
 
-  function test_invest_revertsWith_maxInvestSetToZero() public {
+  function test_invest_revertsWith_MaximumInvestAmountExceeded_maxInvestIsZero() public {
     vm.prank(admin);
     controller.setMaxInvest(0);
 
@@ -108,7 +108,7 @@ contract InvestTest is ReinvestmentControllerTest {
     assertEq(controller.getInvestedAmount(), amount * 2);
   }
 
-  function test_invest_successful() public {
+  function test_invest() public {
     vm.expectEmit(address(controller));
     emit IReinvestmentController.Invested(INVESTABLE);
     _invest(INVESTABLE);
@@ -125,5 +125,26 @@ contract InvestTest is ReinvestmentControllerTest {
     assertEq(gatewayWallet.availableBalance(address(usdc), address(controller)), INVESTABLE);
 
     assertEq(controller.getInvestableAmount(), 0);
+  }
+
+  function test_invest_withinInvestableAmount(uint256 amount) public {
+    amount = bound(amount, 1, INVESTABLE);
+
+    _invest(amount);
+
+    assertEq(controller.getInvestedAmount(), amount);
+    assertEq(controller.getInvestableAmount(), INVESTABLE - amount);
+    assertEq(usdc.balanceOf(address(gatewayWallet)), amount);
+    assertEq(usdc.balanceOf(address(controller)), 0);
+  }
+
+  function test_invest_revertsWith_MaximumInvestAmountExceeded_aboveInvestable(
+    uint256 amount
+  ) public {
+    amount = bound(amount, INVESTABLE + 1, type(uint128).max);
+
+    vm.prank(admin);
+    vm.expectRevert(IReinvestmentController.MaximumInvestAmountExceeded.selector);
+    controller.invest(amount);
   }
 }

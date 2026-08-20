@@ -232,6 +232,18 @@ contract PauseTest is ReinvestmentControllerTest {
 contract UnpauseTest is ReinvestmentControllerTest {
   address public pauser = makeAddr('pauser');
 
+  function test_unpause_revertsWith_withdrawalInProcess() public {
+    _invest(INVESTABLE);
+    _pause();
+
+    vm.prank(admin);
+    controller.initiateWithdrawal();
+
+    vm.prank(admin);
+    vm.expectRevert(IReinvestmentController.WithdrawalInProcess.selector);
+    controller.unpause();
+  }
+
   function test_unpause_revertsWith_callerIsNotAdmin() public {
     vm.prank(admin);
     controller.pause();

@@ -71,8 +71,8 @@ contract ReinvestmentController is
   /// @dev Maximum amount of Hub funds that can be invested (in BPS)
   uint256 private _maxInvestBps;
 
-  /// @dev Pending amount to be withdrawn on-chain
-  uint256 private _pendingWithdrawalAmount;
+  /// @dev Timestamp of the most recent pause, zeroed on unpause
+  uint256 private _pausedAt;
 
   /// @dev Sets the immutable protocol addresses and locks the implementation. The
   /// resulting contract is inert until {initialize} is called on a proxy in front of it.
@@ -144,7 +144,7 @@ contract ReinvestmentController is
     bytes memory signature
   ) external onlyRole(INVESTOR_ROLE) whenNotPaused {
     require(amount > 0 && amount <= _gatewayTxLimit, InvalidAmount());
-    require(amount <= _mintableBalance(), InsufficientLiquidity());
+    require(amount <= HUB.getAssetSwept(ASSET_ID), InsufficientLiquidity());
 
     _validateAttestation(attestationPayload, amount);
 
@@ -156,13 +156,16 @@ contract ReinvestmentController is
   }
 
   /// @inheritdoc IReinvestmentController
-  function initiateWithdrawal(uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
-    // add pausable, allow only after max attestation time, no amount, withdraw max available
+  function initiateWithdrawal() external onlyRole(DEFAULT_ADMIN_ROLE) whenPaused {
+    require(
+      GATEWAY_WALLET.withdrawingBalance(address(USDC), address(this)) == 0,
+      WithdrawalInProcess()
+    );
+
+    uint256 amount = GATEWAY_WALLET.availableBalance(address(USDC), address(this));
+
     require(amount > 0, InvalidAmount());
     require(amount <= HUB.getAssetSwept(ASSET_ID), InsufficientLiquidity());
-    require(_pendingWithdrawalAmount == 0, WithdrawalInProcess());
-
-    _pendingWithdrawalAmount = amount;
 
     GATEWAY_WALLET.initiateWithdrawal(address(USDC), amount);
 
@@ -171,11 +174,9 @@ contract ReinvestmentController is
 
   /// @inheritdoc IReinvestmentController
   function withdraw() external onlyRole(DEFAULT_ADMIN_ROLE) {
-    uint256 amount = _pendingWithdrawalAmount;
+    uint256 amount = GATEWAY_WALLET.withdrawingBalance(address(USDC), address(this));
 
     require(amount > 0, NoWithdrawalInProcess());
-
-    _pendingWithdrawalAmount = 0;
 
     GATEWAY_WALLET.withdraw(address(USDC));
     USDC.safeTransfer(address(HUB), amount);
@@ -186,11 +187,18 @@ contract ReinvestmentController is
 
   /// @inheritdoc IReinvestmentController
   function pause() external onlyRole(PAUSER_ROLE) {
+    _pausedAt = block.timestamp;
     _pause();
   }
 
   /// @inheritdoc IReinvestmentController
   function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+    require(
+      GATEWAY_WALLET.withdrawingBalance(address(USDC), address(this)) == 0,
+      WithdrawalInProcess()
+    );
+
+    _pausedAt = 0;
     _unpause();
   }
 
@@ -254,8 +262,8 @@ contract ReinvestmentController is
   }
 
   /// @inheritdoc IReinvestmentController
-  function pendingWithdrawalAmount() external view returns (uint256) {
-    return _pendingWithdrawalAmount;
+  function pausedAt() external view returns (uint256) {
+    return _pausedAt;
   }
 
   /// @inheritdoc IReinvestmentController
@@ -356,17 +364,6 @@ contract ReinvestmentController is
     require(spec.getValue() == amount, InvalidMintAmount());
   }
 
-  /// @dev Swept funds that are still mintable at the Gateway. An initiated on-chain
-  /// withdrawal moves its amount into the Gateway's withdrawing bucket, where it can no
-  /// longer back a burn or a mint, but it stays swept on the Hub until {withdraw}
-  /// reclaims it. Counting it in both places would let the same funds be committed twice.
-  function _mintableBalance() internal view returns (uint256) {
-    uint256 swept = HUB.getAssetSwept(ASSET_ID);
-    uint256 pending = _pendingWithdrawalAmount;
-
-    return swept > pending ? swept - pending : 0;
-  }
-
   /// @dev Validates a withdrawal (BurnIntent) prior to signing an attestation
   /// @param burnIntentPayload Payload containing withdrawal specification
   function _validateBurnIntent(bytes memory burnIntentPayload) internal view {
@@ -376,7 +373,7 @@ contract ReinvestmentController is
     bytes29 spec = BurnIntentLib.getTransferSpec(BurnIntentLib.next(cursor));
     _validateTransferSpec(address(USDC), spec);
 
-    require(spec.getValue() <= _mintableBalance(), BurnIntentExceedsBalance());
+    require(spec.getValue() <= HUB.getAssetSwept(ASSET_ID), BurnIntentExceedsBalance());
   }
 
   /// @dev Validates the parameters of a withdrawal (BurnIntent)

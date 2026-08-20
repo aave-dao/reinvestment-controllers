@@ -77,12 +77,15 @@ contract ReinvestmentControllerTest is Test {
     hub.setLiquidity(ASSET_ID, amount);
   }
 
-  /// @dev Invests `amount` as the INVESTOR_ROLE holder and leaves the Gateway ready to
-  /// mint it straight back
   function _invest(uint256 amount) internal {
     vm.prank(admin);
     controller.invest(amount);
 
     gatewayMinter.setNextMint(address(usdc), amount);
+  }
+
+  function _pause() internal {
+    vm.prank(admin);
+    controller.pause();
   }
 }

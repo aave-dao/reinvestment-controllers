@@ -196,22 +196,6 @@ contract IsValidSignatureTest is ReinvestmentControllerTest {
     controller.isValidSignature(digest, sig);
   }
 
-  function test_isValidSignature_revertsWith_balanceQueuedForWithdrawal() public {
-    _grantInvestorRole();
-    _invest(INVESTABLE);
-
-    vm.prank(admin);
-    controller.initiateWithdrawal(WITHDRAW_AMOUNT);
-
-    bytes memory payload = _burnIntent(INVESTABLE - WITHDRAW_AMOUNT + 1);
-
-    bytes32 digest = _digest(payload);
-    bytes memory sig = _signature(INVESTOR_KEY, payload);
-
-    vm.expectRevert(IReinvestmentController.BurnIntentExceedsBalance.selector);
-    controller.isValidSignature(digest, sig);
-  }
-
   function test_isValidSignature_revertsWith_burnIntentSet() public {
     _grantInvestorRole();
     _invest(INVESTABLE);

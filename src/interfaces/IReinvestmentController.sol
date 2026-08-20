@@ -140,10 +140,11 @@ interface IReinvestmentController is IERC1271 {
     bytes calldata signature
   ) external;
 
-  /// @notice Initiates an on-chain withdrawal
-  /// @dev Amount can be greater than Gateway transaction limit
-  /// @param amount The amount to withdraw
-  function initiateWithdrawal(uint256 amount) external;
+  /// @notice Initiates an on-chain withdrawal of the entire Gateway balance
+  /// @dev Only while paused, so no attestation or burn intent can be live against the balance
+  /// being moved. Moving it out of the Gateway's available bucket is itself what stops any
+  /// further burn from succeeding
+  function initiateWithdrawal() external;
 
   /// @notice Finalizes a pending withdrawal after required time has elapsed
   function withdraw() external;
@@ -154,7 +155,9 @@ interface IReinvestmentController is IERC1271 {
   function pause() external;
 
   /// @notice Resumes {invest}, {divest} and {isValidSignature}
-  /// @dev Restricted to DEFAULT_ADMIN_ROLE, so a PAUSER_ROLE holder cannot undo its own halt
+  /// @dev Restricted to DEFAULT_ADMIN_ROLE, so a PAUSER_ROLE holder cannot undo its own halt.
+  /// Blocked while an on-chain withdrawal is in flight, since those funds have left the
+  /// Gateway's available balance and can no longer back a burn until {withdraw} completes
   function unpause() external;
 
   /// @notice Sets a new deposit timelock (in seconds)
@@ -252,7 +255,7 @@ interface IReinvestmentController is IERC1271 {
   /// @return The amount that must remain uninvested (in BPS)
   function bufferBps() external view returns (uint256);
 
-  /// @notice Returns the current amount pending an on-chain withdrawal
-  /// @return The amount is pending withdrawal
-  function pendingWithdrawalAmount() external view returns (uint256);
+  /// @notice Returns the timestamp of the most recent pause, or zero if not paused
+  /// @return The timestamp at which {pause} was last called
+  function pausedAt() external view returns (uint256);
 }

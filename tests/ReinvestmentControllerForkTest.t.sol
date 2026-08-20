@@ -192,15 +192,16 @@ contract ForkWithdrawalFlowTest is ReinvestmentControllerForkTest {
     uint256 amount = controller.getInvestableAmount() / 4;
     _invest(amount);
 
+    _pause();
+
     uint256 walletBalanceBefore = IERC20(USDC).balanceOf(GATEWAY_WALLET);
     uint256 expectedWithdrawalBlock = block.number + GATEWAY_WITHDRAWAL_DELAY;
 
     vm.expectEmit(address(controller));
     emit IReinvestmentController.WithdrawalInitiated(amount);
 
-    _initiateWithdrawal(amount);
+    _initiateWithdrawal();
 
-    assertEq(controller.pendingWithdrawalAmount(), amount);
     assertEq(_withdrawalBlock(), expectedWithdrawalBlock);
 
     assertEq(_availableBalance(), 0);
@@ -215,7 +216,8 @@ contract ForkWithdrawalFlowTest is ReinvestmentControllerForkTest {
 
     uint256 amount = controller.getInvestableAmount() / 4;
     _invest(amount);
-    _initiateWithdrawal(amount);
+    _pause();
+    _initiateWithdrawal();
 
     vm.roll(_withdrawalBlock() - 1);
 
@@ -228,13 +230,12 @@ contract ForkWithdrawalFlowTest is ReinvestmentControllerForkTest {
 
     uint256 amount = controller.getInvestableAmount() / 4;
     _invest(amount);
-    _initiateWithdrawal(amount);
+    _pause();
+    _initiateWithdrawal();
 
     vm.roll(_withdrawalBlock());
 
     _withdraw();
-
-    assertEq(controller.pendingWithdrawalAmount(), 0);
   }
 
   function test_withdraw_successful() public {
@@ -246,7 +247,8 @@ contract ForkWithdrawalFlowTest is ReinvestmentControllerForkTest {
 
     uint256 amount = controller.getInvestableAmount() / 4;
     _invest(amount);
-    _initiateWithdrawal(amount);
+    _pause();
+    _initiateWithdrawal();
 
     vm.roll(_withdrawalBlock() + 1);
 
@@ -255,7 +257,6 @@ contract ForkWithdrawalFlowTest is ReinvestmentControllerForkTest {
 
     _withdraw();
 
-    assertEq(controller.pendingWithdrawalAmount(), 0);
     assertEq(controller.getInvestedAmount(), 0);
 
     assertEq(IERC20(USDC).balanceOf(HUB), hubBalanceBefore);
@@ -269,9 +270,14 @@ contract ForkWithdrawalFlowTest is ReinvestmentControllerForkTest {
     assertEq(_withdrawalBlock(), 0);
   }
 
-  function _initiateWithdrawal(uint256 amount) internal {
+  function _pause() internal {
     vm.prank(EXECUTOR_LVL_1);
-    controller.initiateWithdrawal(amount);
+    controller.pause();
+  }
+
+  function _initiateWithdrawal() internal {
+    vm.prank(EXECUTOR_LVL_1);
+    controller.initiateWithdrawal();
   }
 
   function _withdraw() internal {

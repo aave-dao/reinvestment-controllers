@@ -1,0 +1,339 @@
+// SPDX-License-Identifier: LicenseRef-BUSL
+pragma solidity 0.8.29;
+
+import {Test} from 'forge-std/Test.sol';
+
+import {IAccessControl} from '@openzeppelin/contracts/access/IAccessControl.sol';
+import {IERC20} from '@openzeppelin/contracts/interfaces/IERC20.sol';
+import {IERC1271} from '@openzeppelin/contracts/interfaces/IERC1271.sol';
+import {ERC1967Proxy} from '@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol';
+import {Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
+import {MessageHashUtils} from '@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol';
+import {BurnIntentLib} from '@circle-gateway/src/lib/BurnIntentLib.sol';
+import {TransferSpec} from '@circle-gateway/src/lib/TransferSpec.sol';
+import {IHub} from 'aave-v4/hub/interfaces/IHub.sol';
+
+import {ReinvestmentController} from '../src/ReinvestmentController.sol';
+import {IGatewayWallet} from '../src/interfaces/IGatewayWallet.sol';
+import {IReinvestmentController} from '../src/interfaces/IReinvestmentController.sol';
+import {GatewayPayloads} from './utils/GatewayPayloads.sol';
+
+interface IAttestationSigners {
+  function addAttestationSigner(address signer) external;
+}
+
+interface IMintsErrors {
+  error InvalidAttestationSigner();
+}
+
+contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
+  uint256 internal constant FORK_BLOCK = 25_796_690;
+
+  address internal constant GATEWAY_WALLET = 0x77777777Dcc4d5A8B6E418Fd04D8997ef11000eE;
+  address internal constant GATEWAY_MINTER = 0x2222222d7164433c4C09B0b0D809a9b52C04C205;
+  address internal constant HUB = 0xCca852Bc40e560adC3b1Cc58CA5b55638ce826c9;
+  address internal constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+
+  uint256 internal constant DEPOSIT_TIMELOCK = 1 days;
+  uint256 internal constant MAX_INVEST = 10_000_000e6;
+  uint256 internal constant MAX_INVEST_BPS = 8_000;
+  uint256 internal constant BUFFER_BPS = 1_000;
+
+  address internal admin = makeAddr('admin');
+  address internal alice = makeAddr('alice');
+
+  address internal investor;
+  uint256 internal investorPrivateKey;
+  address internal circleSigner;
+  uint256 internal circleSignerPrivateKey;
+
+  ReinvestmentController internal controller;
+  uint256 internal assetId;
+
+  function setUp() public {
+    vm.createSelectFork(vm.rpcUrl('mainnet'), FORK_BLOCK);
+
+    (investor, investorPrivateKey) = makeAddrAndKey('investor');
+    (circleSigner, circleSignerPrivateKey) = makeAddrAndKey('circleSigner');
+
+    controller = ReinvestmentController(
+      address(
+        new ERC1967Proxy(
+          address(new ReinvestmentController(GATEWAY_WALLET, GATEWAY_MINTER, HUB, USDC)),
+          abi.encodeCall(
+            IReinvestmentController.initialize,
+            (admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, BUFFER_BPS)
+          )
+        )
+      )
+    );
+
+    assetId = controller.ASSET_ID();
+    _setPayloadContext(GATEWAY_WALLET, GATEWAY_MINTER, USDC, address(controller));
+
+    bytes32 investorRole = controller.INVESTOR_ROLE();
+    vm.prank(admin);
+    controller.grantRole(investorRole, investor);
+
+    _pointHubAtTheController();
+    _allowCircleSigner();
+
+    vm.warp(block.timestamp + DEPOSIT_TIMELOCK + 1);
+  }
+
+  function test_invest() public {
+    uint256 amount = controller.getInvestableAmount();
+    uint256 liquidityBefore = IHub(HUB).getAssetLiquidity(assetId);
+    uint256 hubBalanceBefore = IERC20(USDC).balanceOf(HUB);
+
+    vm.expectEmit(HUB);
+    emit IHub.Sweep(assetId, address(controller), amount);
+    vm.expectEmit(address(controller));
+    emit IReinvestmentController.Invested(amount);
+
+    vm.prank(investor);
+    controller.invest(amount);
+
+    assertGt(amount, 0);
+    assertEq(IHub(HUB).getAssetLiquidity(assetId), liquidityBefore - amount);
+    assertEq(IHub(HUB).getAssetSwept(assetId), amount);
+    assertEq(controller.getInvestedAmount(), amount);
+    assertEq(controller.getInvestableAmount(), 0);
+    assertEq(IERC20(USDC).balanceOf(HUB), hubBalanceBefore - amount);
+    assertEq(IERC20(USDC).balanceOf(address(controller)), 0);
+    assertEq(IERC20(USDC).allowance(address(controller), GATEWAY_WALLET), 0);
+    assertEq(IGatewayWallet(GATEWAY_WALLET).availableBalance(USDC, address(controller)), amount);
+    assertEq(IGatewayWallet(GATEWAY_WALLET).withdrawingBalance(USDC, address(controller)), 0);
+  }
+
+  function test_invest_revertsWith_MaximumInvestAmountExceeded() public {
+    uint256 amount = controller.getInvestableAmount() + 1;
+
+    vm.expectRevert(IReinvestmentController.MaximumInvestAmountExceeded.selector);
+    vm.prank(investor);
+    controller.invest(amount);
+  }
+
+  function test_invest_revertsWith_OnlyReinvestmentController() public {
+    uint256 amount = controller.getInvestableAmount();
+    _pointHubAt(address(0));
+
+    vm.expectRevert(IHub.OnlyReinvestmentController.selector);
+    vm.prank(investor);
+    controller.invest(amount);
+  }
+
+  function test_divest() public {
+    uint256 amount = controller.getInvestableAmount();
+    vm.prank(investor);
+    controller.invest(amount);
+    uint256 liquidityBefore = IHub(HUB).getAssetLiquidity(assetId);
+    uint256 hubBalanceBefore = IERC20(USDC).balanceOf(HUB);
+
+    (bytes memory attestation, bytes memory signature) = _attest(amount);
+
+    vm.expectEmit(HUB);
+    emit IHub.Reclaim(assetId, address(controller), amount);
+    vm.expectEmit(address(controller));
+    emit IReinvestmentController.Divested(amount);
+
+    vm.prank(investor);
+    controller.divest(amount, attestation, signature);
+
+    assertEq(IHub(HUB).getAssetLiquidity(assetId), liquidityBefore + amount);
+    assertEq(IHub(HUB).getAssetSwept(assetId), 0);
+    assertEq(controller.getInvestedAmount(), 0);
+    assertEq(IERC20(USDC).balanceOf(HUB), hubBalanceBefore + amount);
+    assertEq(IERC20(USDC).balanceOf(address(controller)), 0);
+  }
+
+  function test_divest_revertsWith_InsufficientLiquidity() public {
+    uint256 amount = controller.getInvestableAmount();
+    vm.prank(investor);
+    controller.invest(amount);
+    (bytes memory attestation, bytes memory signature) = _attest(amount + 1);
+
+    vm.expectRevert(IReinvestmentController.InsufficientLiquidity.selector);
+    vm.prank(investor);
+    controller.divest(amount + 1, attestation, signature);
+  }
+
+  function test_divest_revertsWith_InvalidAttestationSigner() public {
+    uint256 amount = controller.getInvestableAmount();
+    vm.prank(investor);
+    controller.invest(amount);
+
+    bytes memory attestation = _encodeAttestation(_defaultTransferSpec(amount));
+    (uint8 v, bytes32 r, bytes32 s) = vm.sign(
+      investorPrivateKey,
+      MessageHashUtils.toEthSignedMessageHash(keccak256(attestation))
+    );
+
+    vm.expectRevert(IMintsErrors.InvalidAttestationSigner.selector);
+    vm.prank(investor);
+    controller.divest(amount, attestation, abi.encodePacked(r, s, v));
+  }
+
+  function test_initiateWithdrawal() public {
+    uint256 amount = controller.getInvestableAmount();
+    vm.prank(investor);
+    controller.invest(amount);
+
+    vm.startPrank(admin);
+    controller.pause();
+
+    vm.expectEmit(address(controller));
+    emit IReinvestmentController.WithdrawalInitiated(amount);
+    controller.initiateWithdrawal();
+    vm.stopPrank();
+
+    assertEq(IGatewayWallet(GATEWAY_WALLET).availableBalance(USDC, address(controller)), 0);
+    assertEq(IGatewayWallet(GATEWAY_WALLET).withdrawingBalance(USDC, address(controller)), amount);
+    assertEq(
+      IGatewayWallet(GATEWAY_WALLET).withdrawalBlock(USDC, address(controller)),
+      block.number + IGatewayWallet(GATEWAY_WALLET).withdrawalDelay()
+    );
+  }
+
+  function test_withdraw() public {
+    uint256 amount = controller.getInvestableAmount();
+    vm.prank(investor);
+    controller.invest(amount);
+    uint256 liquidityBefore = IHub(HUB).getAssetLiquidity(assetId);
+    uint256 hubBalanceBefore = IERC20(USDC).balanceOf(HUB);
+
+    vm.startPrank(admin);
+    controller.pause();
+    controller.initiateWithdrawal();
+    vm.stopPrank();
+
+    vm.roll(block.number + IGatewayWallet(GATEWAY_WALLET).withdrawalDelay());
+
+    vm.expectEmit(address(controller));
+    emit IReinvestmentController.WithdrawalCompleted(amount);
+
+    vm.prank(admin);
+    controller.withdraw();
+
+    assertEq(IHub(HUB).getAssetLiquidity(assetId), liquidityBefore + amount);
+    assertEq(IHub(HUB).getAssetSwept(assetId), 0);
+    assertEq(IERC20(USDC).balanceOf(HUB), hubBalanceBefore + amount);
+    assertEq(IERC20(USDC).balanceOf(address(controller)), 0);
+    assertEq(IGatewayWallet(GATEWAY_WALLET).withdrawingBalance(USDC, address(controller)), 0);
+    assertTrue(controller.paused());
+  }
+
+  function test_isValidSignature() public {
+    uint256 amount = controller.getInvestableAmount();
+    vm.prank(investor);
+    controller.invest(amount);
+    (bytes32 digest, bytes memory signature) = _signBurnIntent(
+      investorPrivateKey,
+      _encodeBurnIntent(_defaultTransferSpec(amount))
+    );
+
+    assertEq(controller.isValidSignature(digest, signature), IERC1271.isValidSignature.selector);
+  }
+
+  function test_isValidSignature_revertsWith_HashMismatch() public {
+    uint256 amount = controller.getInvestableAmount();
+    vm.prank(investor);
+    controller.invest(amount);
+    (, bytes memory signature) = _signBurnIntent(
+      investorPrivateKey,
+      _encodeBurnIntent(_defaultTransferSpec(amount))
+    );
+
+    vm.expectRevert(IReinvestmentController.HashMismatch.selector);
+    controller.isValidSignature(keccak256('not the digest'), signature);
+  }
+
+  function test_isValidSignature_revertsWith_BurnIntentExceedsBalance() public {
+    uint256 amount = controller.getInvestableAmount();
+    vm.prank(investor);
+    controller.invest(amount);
+    (bytes32 digest, bytes memory signature) = _signBurnIntent(
+      investorPrivateKey,
+      _encodeBurnIntent(_defaultTransferSpec(amount + 1))
+    );
+
+    vm.expectRevert(IReinvestmentController.BurnIntentExceedsBalance.selector);
+    controller.isValidSignature(digest, signature);
+  }
+
+  function test_invest_withinInvestableAmount(uint256 amount) public {
+    amount = bound(amount, 1, controller.getInvestableAmount());
+    uint256 liquidityBefore = IHub(HUB).getAssetLiquidity(assetId);
+
+    vm.prank(investor);
+    controller.invest(amount);
+
+    assertEq(IHub(HUB).getAssetSwept(assetId), amount);
+    assertEq(IHub(HUB).getAssetLiquidity(assetId), liquidityBefore - amount);
+    assertEq(IGatewayWallet(GATEWAY_WALLET).availableBalance(USDC, address(controller)), amount);
+    assertEq(IERC20(USDC).balanceOf(address(controller)), 0);
+  }
+
+  function test_preconditions_gatewayWithdrawalDelayAtForkBlock() public view {
+    assertEq(IGatewayWallet(GATEWAY_WALLET).withdrawalDelay(), 50_400);
+  }
+
+  function test_preconditions_assetHasNoReinvestmentControllerAtForkBlock() public {
+    vm.createSelectFork(vm.rpcUrl('mainnet'), FORK_BLOCK);
+
+    uint256 forkAssetId = IHub(HUB).getAssetId(USDC);
+
+    assertEq(IHub(HUB).getAssetConfig(forkAssetId).reinvestmentController, address(0));
+    assertEq(IHub(HUB).getAssetSwept(forkAssetId), 0);
+  }
+
+  function _attest(
+    uint256 amount
+  ) internal view returns (bytes memory attestation, bytes memory signature) {
+    attestation = _encodeAttestation(_defaultTransferSpec(amount));
+
+    (uint8 v, bytes32 r, bytes32 s) = vm.sign(
+      circleSignerPrivateKey,
+      MessageHashUtils.toEthSignedMessageHash(keccak256(attestation))
+    );
+    signature = abi.encodePacked(r, s, v);
+  }
+
+  function _signBurnIntent(
+    uint256 privateKey,
+    bytes memory burnIntentPayload
+  ) internal view returns (bytes32 digest, bytes memory signature) {
+    digest = MessageHashUtils.toTypedDataHash(
+      IGatewayWallet(GATEWAY_WALLET).domainSeparator(),
+      BurnIntentLib.getTypedDataHash(burnIntentPayload)
+    );
+
+    (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);
+    signature = abi.encode(abi.encodePacked(r, s, v), burnIntentPayload);
+  }
+
+  /// @dev Listing a reinvestment controller is an access-managed governance action, so the
+  /// authority is short-circuited for the single configuration call and then restored.
+  function _pointHubAtTheController() internal {
+    _pointHubAt(address(controller));
+  }
+
+  function _pointHubAt(address reinvestmentController) internal {
+    IHub.AssetConfig memory config = IHub(HUB).getAssetConfig(assetId);
+    config.reinvestmentController = reinvestmentController;
+
+    vm.mockCall(
+      IHub(HUB).authority(),
+      abi.encodeWithSignature('canCall(address,address,bytes4)'),
+      abi.encode(true, uint32(0))
+    );
+    vm.prank(admin);
+    IHub(HUB).updateAssetConfig(assetId, config, '');
+    vm.clearMockedCalls();
+  }
+
+  function _allowCircleSigner() internal {
+    vm.prank(Ownable(GATEWAY_MINTER).owner());
+    IAttestationSigners(GATEWAY_MINTER).addAttestationSigner(circleSigner);
+  }
+}

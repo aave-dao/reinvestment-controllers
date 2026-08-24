@@ -1,0 +1,119 @@
+// SPDX-License-Identifier: LicenseRef-BUSL
+pragma solidity 0.8.29;
+
+import {Test} from 'forge-std/Test.sol';
+import {ERC1967Proxy} from '@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol';
+import {MessageHashUtils} from '@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol';
+import {BurnIntentLib} from '@circle-gateway/src/lib/BurnIntentLib.sol';
+
+import {ReinvestmentController} from '../src/ReinvestmentController.sol';
+import {IReinvestmentController} from '../src/interfaces/IReinvestmentController.sol';
+
+import {MockGatewayMinter} from './mocks/MockGatewayMinter.sol';
+import {MockGatewayWallet} from './mocks/MockGatewayWallet.sol';
+import {MockHub} from './mocks/MockHub.sol';
+import {MockUSDC} from './mocks/MockUSDC.sol';
+import {GatewayPayloads} from './utils/GatewayPayloads.sol';
+
+abstract contract ReinvestmentControllerTestBase is Test, GatewayPayloads {
+  uint256 internal constant WITHDRAWAL_DELAY = 7;
+  uint256 internal constant DEPOSIT_TIMELOCK = 1 days;
+  uint256 internal constant MAX_INVEST = 10_000_000e6;
+  uint256 internal constant MAX_INVEST_BPS = 8_000;
+  uint256 internal constant BUFFER_BPS = 1_000;
+  uint256 internal constant PERCENTAGE_FACTOR = 100_00;
+
+  uint256 internal constant SUPPLIED = 1_000_000e6;
+  uint256 internal constant BUFFER = 100_000e6;
+  uint256 internal constant INVESTABLE = 800_000e6;
+
+  MockUSDC internal usdc;
+  MockHub internal hub;
+  MockGatewayWallet internal wallet;
+  MockGatewayMinter internal minter;
+
+  ReinvestmentController internal implementation;
+  ReinvestmentController internal controller;
+
+  uint256 internal assetId;
+
+  address internal admin;
+  uint256 internal adminPrivateKey;
+  address internal investor;
+  uint256 internal investorPrivateKey;
+  address internal pauser;
+  address internal alice;
+  uint256 internal alicePrivateKey;
+
+  function setUp() public virtual {
+    vm.warp(1_700_000_000);
+    vm.roll(21_000_000);
+
+    (admin, adminPrivateKey) = makeAddrAndKey('admin');
+    (investor, investorPrivateKey) = makeAddrAndKey('investor');
+    (alice, alicePrivateKey) = makeAddrAndKey('alice');
+    pauser = makeAddr('pauser');
+
+    usdc = new MockUSDC();
+    hub = new MockHub(address(usdc));
+    wallet = new MockGatewayWallet(WITHDRAWAL_DELAY);
+    minter = new MockGatewayMinter(address(wallet));
+    wallet.setGatewayMinter(address(minter));
+
+    assetId = hub.USDC_ASSET_ID();
+
+    implementation = new ReinvestmentController(
+      address(wallet),
+      address(minter),
+      address(hub),
+      address(usdc)
+    );
+    controller = ReinvestmentController(
+      address(
+        new ERC1967Proxy(
+          address(implementation),
+          abi.encodeCall(
+            IReinvestmentController.initialize,
+            (admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, BUFFER_BPS)
+          )
+        )
+      )
+    );
+
+    _setPayloadContext(address(wallet), address(minter), address(usdc), address(controller));
+
+    hub.setReinvestmentController(address(controller));
+    hub.add(SUPPLIED);
+
+    bytes32 investorRole = controller.INVESTOR_ROLE();
+    bytes32 pauserRole = controller.PAUSER_ROLE();
+
+    vm.startPrank(admin);
+    controller.grantRole(investorRole, investor);
+    controller.grantRole(pauserRole, pauser);
+    vm.stopPrank();
+  }
+
+  function _invest(uint256 amount) internal {
+    vm.prank(investor);
+    controller.invest(amount);
+  }
+
+  function _pause() internal {
+    vm.prank(pauser);
+    controller.pause();
+  }
+
+  function _signBurnIntent(
+    uint256 privateKey,
+    bytes memory burnIntentPayload
+  ) internal view returns (bytes32 digest, bytes memory signature) {
+    digest = MessageHashUtils.toTypedDataHash(
+      wallet.domainSeparator(),
+      BurnIntentLib.getTypedDataHash(burnIntentPayload)
+    );
+
+    (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);
+    signature = abi.encode(abi.encodePacked(r, s, v), burnIntentPayload);
+  }
+}

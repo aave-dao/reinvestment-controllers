@@ -68,6 +68,9 @@ contract ReinvestmentController is
   /// @dev Maximum amount of Hub funds that can be invested (in BPS)
   uint256 private _maxInvestBps;
 
+  /// @dev Maximum fee payable to the Gateway operator on a withdrawal (in absolute terms)
+  uint256 private _maxFee;
+
   /// @dev Timestamp of the most recent pause, zeroed on unpause
   uint256 private _pausedAt;
 
@@ -101,6 +104,7 @@ contract ReinvestmentController is
     uint256 depositTimelock_,
     uint256 maxInvest_,
     uint256 maxInvestBps_,
+    uint256 maxFee_,
     uint256 bufferBps_
   ) external initializer {
     require(admin != address(0), InvalidZeroAddress());
@@ -115,6 +119,7 @@ contract ReinvestmentController is
     _setDepositTimelock(depositTimelock_);
     _setMaxInvest(maxInvest_);
     _setMaxInvestBps(maxInvestBps_);
+    _setMaxFee(maxFee_);
     _setBufferBps(bufferBps_);
   }
 
@@ -140,15 +145,23 @@ contract ReinvestmentController is
     bytes memory signature
   ) external onlyRole(INVESTOR_ROLE) whenNotPaused {
     require(amount > 0, InvalidAmount());
-    require(amount <= HUB.getAssetSwept(ASSET_ID), InsufficientLiquidity());
+
+    uint256 fee = _maxFee;
+    uint256 total = amount + fee;
+    require(total <= HUB.getAssetSwept(ASSET_ID), InsufficientLiquidity());
 
     _validateAttestation(attestationPayload, amount);
 
     GATEWAY_MINTER.gatewayMint(attestationPayload, signature);
-    USDC.safeTransfer(address(HUB), amount);
-    HUB.reclaim(ASSET_ID, amount);
 
-    emit Divested(amount);
+    if (fee > 0) {
+      USDC.safeTransferFrom(msg.sender, address(this), fee);
+    }
+
+    USDC.safeTransfer(address(HUB), total);
+    HUB.reclaim(ASSET_ID, total);
+
+    emit Divested(amount, fee);
   }
 
   /// @inheritdoc IReinvestmentController
@@ -209,6 +222,11 @@ contract ReinvestmentController is
   }
 
   /// @inheritdoc IReinvestmentController
+  function setMaxFee(uint256 maxFee_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    _setMaxFee(maxFee_);
+  }
+
+  /// @inheritdoc IReinvestmentController
   function setMaxInvest(uint256 maxAmount) external onlyRole(DEFAULT_ADMIN_ROLE) {
     _setMaxInvest(maxAmount);
   }
@@ -229,8 +247,22 @@ contract ReinvestmentController is
   }
 
   /// @inheritdoc IReinvestmentController
+  function getDrift() external view returns (uint256) {
+    uint256 swept = HUB.getAssetSwept(ASSET_ID);
+    uint256 held = GATEWAY_WALLET.availableBalance(address(USDC), address(this)) +
+      GATEWAY_WALLET.withdrawingBalance(address(USDC), address(this));
+
+    return swept > held ? swept - held : 0;
+  }
+
+  /// @inheritdoc IReinvestmentController
   function depositTimelock() external view returns (uint256) {
     return _depositTimelock;
+  }
+
+  /// @inheritdoc IReinvestmentController
+  function maxFee() external view returns (uint256) {
+    return _maxFee;
   }
 
   /// @inheritdoc IReinvestmentController
@@ -294,6 +326,15 @@ contract ReinvestmentController is
     emit SetBufferBps(oldBufferBps, buffer);
   }
 
+  /// @dev Sets the maximum fee payable to the Gateway operator on a withdrawal
+  /// Can be set to 0 to reject any fee-bearing withdrawal
+  /// @param maxFee_ The new maximum fee (in absolute terms)
+  function _setMaxFee(uint256 maxFee_) internal {
+    uint256 oldMaxFee = _maxFee;
+    _maxFee = maxFee_;
+    emit SetMaxFee(oldMaxFee, maxFee_);
+  }
+
   /// @dev Sets the maximum amount that can be invested (in absolute terms)
   /// Can be set to 0 to sunset ReinvestmentController
   /// @param maxAmount The new maximum amount (in absolute terms)
@@ -348,10 +389,17 @@ contract ReinvestmentController is
     Cursor memory cursor = BurnIntentLib.cursor(burnIntentPayload);
     require(cursor.numElements == 1, InvalidElementCount());
 
-    bytes29 spec = BurnIntentLib.getTransferSpec(BurnIntentLib.next(cursor));
+    bytes29 intent = BurnIntentLib.next(cursor);
+    bytes29 spec = BurnIntentLib.getTransferSpec(intent);
     _validateTransferSpec(address(USDC), spec);
 
-    require(spec.getValue() <= HUB.getAssetSwept(ASSET_ID), BurnIntentExceedsBalance());
+    uint256 intentMaxFee = BurnIntentLib.getMaxFee(intent);
+    require(intentMaxFee <= _maxFee, MaxFeeExceeded());
+
+    require(
+      spec.getValue() + intentMaxFee <= HUB.getAssetSwept(ASSET_ID),
+      BurnIntentExceedsBalance()
+    );
   }
 
   /// @dev Validates the parameters of a withdrawal (BurnIntent)

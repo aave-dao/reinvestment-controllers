@@ -196,6 +196,50 @@ contract ReinvestmentControllerIsValidSignatureTest is ReinvestmentControllerTes
     controller.isValidSignature(digest, sig);
   }
 
+  function test_isValidSignature_revertsWith_BurnIntentExceedsBalance_feePushesOverBalance()
+    public
+  {
+    _grantInvestorRole();
+    _invest(INVESTABLE);
+
+    bytes memory payload = _burnIntent(INVESTABLE, 1);
+
+    bytes32 digest = _digest(payload);
+    bytes memory sig = _signature(INVESTOR_KEY, payload);
+
+    vm.expectRevert(IReinvestmentController.BurnIntentExceedsBalance.selector);
+    controller.isValidSignature(digest, sig);
+  }
+
+  function test_isValidSignature_revertsWith_MaxFeeExceeded() public {
+    _grantInvestorRole();
+    _invest(INVESTABLE);
+
+    bytes memory payload = _burnIntent(WITHDRAW_AMOUNT, MAX_FEE + 1);
+
+    bytes32 digest = _digest(payload);
+    bytes memory sig = _signature(INVESTOR_KEY, payload);
+
+    vm.expectRevert(IReinvestmentController.MaxFeeExceeded.selector);
+    controller.isValidSignature(digest, sig);
+  }
+
+  function test_isValidSignature_revertsWith_MaxFeeExceeded_whenMaxFeeIsZero() public {
+    _grantInvestorRole();
+    _invest(INVESTABLE);
+
+    vm.prank(admin);
+    controller.setMaxFee(0);
+
+    bytes memory payload = _burnIntent(WITHDRAW_AMOUNT, 1);
+
+    bytes32 digest = _digest(payload);
+    bytes memory sig = _signature(INVESTOR_KEY, payload);
+
+    vm.expectRevert(IReinvestmentController.MaxFeeExceeded.selector);
+    controller.isValidSignature(digest, sig);
+  }
+
   function test_isValidSignature_revertsWith_InvalidElementCount() public {
     _grantInvestorRole();
     _invest(INVESTABLE);
@@ -214,6 +258,18 @@ contract ReinvestmentControllerIsValidSignatureTest is ReinvestmentControllerTes
     _invest(INVESTABLE);
 
     bytes memory payload = _burnIntent(INVESTABLE);
+
+    assertEq(
+      controller.isValidSignature(_digest(payload), _signature(INVESTOR_KEY, payload)),
+      IERC1271.isValidSignature.selector
+    );
+  }
+
+  function test_isValidSignature_atMaxFee() public {
+    _grantInvestorRole();
+    _invest(INVESTABLE);
+
+    bytes memory payload = _burnIntent(INVESTABLE - MAX_FEE, MAX_FEE);
 
     assertEq(
       controller.isValidSignature(_digest(payload), _signature(INVESTOR_KEY, payload)),
@@ -263,14 +319,22 @@ contract ReinvestmentControllerIsValidSignatureTest is ReinvestmentControllerTes
   }
 
   function _encode(TransferSpec memory spec) internal view returns (bytes memory) {
+    return _encode(spec, 0);
+  }
+
+  function _encode(TransferSpec memory spec, uint256 maxFee_) internal view returns (bytes memory) {
     return
       BurnIntentLib.encodeBurnIntent(
-        BurnIntent({maxBlockHeight: block.number + 1, maxFee: 0, spec: spec})
+        BurnIntent({maxBlockHeight: block.number + 1, maxFee: maxFee_, spec: spec})
       );
   }
 
   function _burnIntent(uint256 value) internal view returns (bytes memory) {
     return _encode(_transferSpec(value));
+  }
+
+  function _burnIntent(uint256 value, uint256 maxFee_) internal view returns (bytes memory) {
+    return _encode(_transferSpec(value), maxFee_);
   }
 
   function _burnIntentSet(

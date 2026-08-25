@@ -19,6 +19,10 @@ contract ReinvestmentControllerTestBase is Test {
   uint256 public constant MAX_INVEST = 100_000_000e6;
   uint256 public constant MAX_INVEST_BPS = 80_00; // 80%
   uint256 public constant BUFFER_BPS = 10_00; // 10%
+  uint256 public constant MAX_FEE = 1e6;
+
+  /// @dev Fee budget minted to the investor so `divest` can pull `MAX_FEE` per call
+  uint256 public constant FEE_FUNDING = 1_000e6;
 
   /// @dev Starting Hub state: everything supplied is idle, nothing swept yet
   uint256 public constant SUPPLIED = 1_000_000e6;
@@ -58,13 +62,17 @@ contract ReinvestmentControllerTestBase is Test {
       proxyAdminOwner,
       abi.encodeCall(
         ReinvestmentController.initialize,
-        (admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, BUFFER_BPS)
+        (admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS)
       )
     );
 
     controller = ReinvestmentController(address(proxy));
 
     _fundHub(SUPPLIED);
+
+    usdc.mint(admin, FEE_FUNDING);
+    vm.prank(admin);
+    usdc.approve(address(controller), type(uint256).max);
 
     // _depositLastUpdate starts at 0, so the first invest stays gated until the
     // timelock has elapsed against the block clock

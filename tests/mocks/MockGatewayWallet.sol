@@ -21,6 +21,9 @@ contract MockGatewayWallet is IGatewayWallet {
   /// @dev Mirrors the real wallet's revert when `withdraw` runs before the delay elapses
   error WithdrawalNotYetAvailable();
 
+  /// @dev Stands in for the real wallet's `feeRecipient` role
+  address public constant FEE_RECIPIENT = address(0xFEE);
+
   mapping(address token => mapping(address depositor => uint256 amount)) private _availableBalances;
 
   mapping(address token => mapping(address depositor => uint256 amount))
@@ -50,10 +53,21 @@ contract MockGatewayWallet is IGatewayWallet {
   }
 
   /// @dev Models Circle burning an attested balance out-of-band, which the controller has
-  /// no way to trigger itself. Burns rather than transfers away, so that total supply
-  /// stays conserved against the minter's corresponding mint.
-  function simulateGatewayBurn(address token, address depositor, uint256 value) external {
-    _availableBalances[token][depositor] -= value;
+  /// no way to trigger itself. Debits `value + fee`, sends the fee to `FEE_RECIPIENT` and
+  /// burns the rest, mirroring `Burns._processIntentsAndBurn`. Total supply therefore stays
+  /// conserved against the minter's corresponding mint of `value`.
+  function simulateGatewayBurn(
+    address token,
+    address depositor,
+    uint256 value,
+    uint256 fee
+  ) external {
+    _availableBalances[token][depositor] -= (value + fee);
+
+    if (fee > 0) {
+      IERC20(token).safeTransfer(FEE_RECIPIENT, fee);
+    }
+
     MockERC20(token).burn(address(this), value);
   }
 

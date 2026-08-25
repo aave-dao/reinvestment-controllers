@@ -184,6 +184,38 @@ contract ReinvestmentControllerSetBufferBpsTest is ReinvestmentControllerTestBas
   }
 }
 
+contract ReinvestmentControllerSetMaxFeeTest is ReinvestmentControllerTestBase {
+  uint256 public constant NEW_MAX_FEE = 2e6;
+
+  function test_setMaxFee_revertsWith_AccessControlUnauthorizedAccount() public {
+    vm.expectRevert(
+      abi.encodeWithSelector(
+        IAccessControl.AccessControlUnauthorizedAccount.selector,
+        address(this),
+        controller.DEFAULT_ADMIN_ROLE()
+      )
+    );
+    controller.setMaxFee(NEW_MAX_FEE);
+  }
+
+  function test_setMaxFee_allowsZeroToRejectAllFees() public {
+    vm.prank(admin);
+    controller.setMaxFee(0);
+
+    assertEq(controller.maxFee(), 0);
+  }
+
+  function test_setMaxFee() public {
+    vm.expectEmit(address(controller));
+    emit IReinvestmentController.SetMaxFee(MAX_FEE, NEW_MAX_FEE);
+
+    vm.prank(admin);
+    controller.setMaxFee(NEW_MAX_FEE);
+
+    assertEq(controller.maxFee(), NEW_MAX_FEE);
+  }
+}
+
 contract ReinvestmentControllerSetMaxInvestTest is ReinvestmentControllerTestBase {
   uint256 public constant NEW_MAX_INVEST = 50_000_000e6;
 

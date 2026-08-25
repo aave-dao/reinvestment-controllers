@@ -42,6 +42,10 @@ contract ReinvestmentControllerForkTestBase is Test {
   uint256 public constant MAX_INVEST = 100_000_000e6;
   uint256 public constant MAX_INVEST_BPS = 80_00; // 80%
   uint256 public constant BUFFER_BPS = 10_00; // 10%
+  uint256 public constant MAX_FEE = 1e6;
+
+  /// @dev Fee budget dealt to the investor so `divest` can pull `MAX_FEE` per call
+  uint256 public constant FEE_FUNDING = 1_000e6;
 
   uint256 public constant GATEWAY_WITHDRAWAL_DELAY = 50_400;
 
@@ -63,11 +67,16 @@ contract ReinvestmentControllerForkTestBase is Test {
       EXECUTOR_LVL_1,
       abi.encodeCall(
         ReinvestmentController.initialize,
-        (EXECUTOR_LVL_1, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, BUFFER_BPS)
+        (EXECUTOR_LVL_1, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS)
       )
     );
 
     controller = ReinvestmentController(address(proxy));
+
+    deal(USDC, EXECUTOR_LVL_1, FEE_FUNDING);
+
+    vm.prank(EXECUTOR_LVL_1);
+    IERC20(USDC).approve(address(controller), type(uint256).max);
   }
 
   function _setReinvestmentController() internal {
@@ -314,8 +323,10 @@ contract ReinvestmentControllerForkDivestTest is ReinvestmentControllerForkTestB
   function test_divest_revertsWith_InvalidAttestationSigner() public {
     _setReinvestmentController();
 
-    uint256 amount = controller.getInvestableAmount() / 4;
-    _invest(amount);
+    uint256 invested = controller.getInvestableAmount() / 4;
+    _invest(invested);
+
+    uint256 amount = invested - MAX_FEE;
 
     bytes memory payload = _attestation(amount);
     bytes memory signature = _attestationSignature(payload);
@@ -328,8 +339,10 @@ contract ReinvestmentControllerForkDivestTest is ReinvestmentControllerForkTestB
     _setReinvestmentController();
     _authorizeAttestationSigner();
 
-    uint256 amount = controller.getInvestableAmount() / 4;
-    _invest(amount);
+    uint256 invested = controller.getInvestableAmount() / 4;
+    _invest(invested);
+
+    uint256 amount = invested - MAX_FEE;
 
     bytes memory payload = _attestation(amount - 1);
     bytes memory signature = _attestationSignature(payload);
@@ -344,16 +357,17 @@ contract ReinvestmentControllerForkDivestTest is ReinvestmentControllerForkTestB
 
     uint256 hubBalanceBefore = IERC20(USDC).balanceOf(HUB);
 
-    uint256 amount = controller.getInvestableAmount() / 4;
-    _invest(amount);
+    uint256 invested = controller.getInvestableAmount() / 4;
+    _invest(invested);
 
     uint256 supplyBefore = IERC20(USDC).totalSupply();
+    uint256 amount = invested - MAX_FEE;
 
     bytes memory payload = _attestation(amount);
     bytes memory signature = _attestationSignature(payload);
 
     vm.expectEmit(address(controller));
-    emit IReinvestmentController.Divested(amount);
+    emit IReinvestmentController.Divested(amount, MAX_FEE);
 
     _divest(amount, payload, signature);
 

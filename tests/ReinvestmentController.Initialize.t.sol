@@ -94,7 +94,7 @@ contract ReinvestmentControllerConstructorTest is Test {
     );
 
     vm.expectRevert(Initializable.InvalidInitialization.selector);
-    controller.initialize(address(this), 1 days, 1e6, 8_000, 1_000);
+    controller.initialize(address(this), 1 days, 1e6, 8_000, 1e6, 1_000);
   }
 
   function test_constructor() public {
@@ -122,37 +122,37 @@ contract ReinvestmentControllerConstructorTest is Test {
 contract ReinvestmentControllerInitializeTest is ReinvestmentControllerTestBase {
   function test_initialize_revertsWith_InvalidInitialization() public {
     vm.expectRevert(Initializable.InvalidInitialization.selector);
-    controller.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, BUFFER_BPS);
+    controller.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
   }
 
   function test_initialize_revertsWith_InvalidZeroAddress() public {
     vm.expectRevert(IReinvestmentController.InvalidZeroAddress.selector);
-    _initProxy(address(0), DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, BUFFER_BPS);
+    _initProxy(address(0), DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
   }
 
   function test_initialize_revertsWith_InvalidAmount_depositTimelockIsZero() public {
     vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
-    _initProxy(admin, 0, MAX_INVEST, MAX_INVEST_BPS, BUFFER_BPS);
+    _initProxy(admin, 0, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
   }
 
   function test_initialize_revertsWith_InvalidAmount_maxInvestBpsIsZero() public {
     vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
-    _initProxy(admin, DEPOSIT_TIMELOCK, MAX_INVEST, 0, BUFFER_BPS);
+    _initProxy(admin, DEPOSIT_TIMELOCK, MAX_INVEST, 0, MAX_FEE, BUFFER_BPS);
   }
 
   function test_initialize_revertsWith_InvalidAmount_maxInvestBpsAtMax() public {
     vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
-    _initProxy(admin, DEPOSIT_TIMELOCK, MAX_INVEST, 10_000, BUFFER_BPS);
+    _initProxy(admin, DEPOSIT_TIMELOCK, MAX_INVEST, 10_000, MAX_FEE, BUFFER_BPS);
   }
 
   function test_initialize_revertsWith_InvalidAmount_bufferBpsIsZero() public {
     vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
-    _initProxy(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, 0);
+    _initProxy(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, 0);
   }
 
   function test_initialize_revertsWith_InvalidAmount_bufferBpsAtMax() public {
     vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
-    _initProxy(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, 10_000);
+    _initProxy(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, 10_000);
   }
 
   function test_initialize() public {
@@ -161,6 +161,7 @@ contract ReinvestmentControllerInitializeTest is ReinvestmentControllerTestBase 
       DEPOSIT_TIMELOCK,
       MAX_INVEST,
       MAX_INVEST_BPS,
+      MAX_FEE,
       BUFFER_BPS
     );
 
@@ -174,6 +175,7 @@ contract ReinvestmentControllerInitializeTest is ReinvestmentControllerTestBase 
     assertEq(newController.maxInvest(), MAX_INVEST);
     assertEq(newController.maxInvestBps(), MAX_INVEST_BPS);
     assertEq(newController.bufferBps(), BUFFER_BPS);
+    assertEq(newController.maxFee(), MAX_FEE);
   }
 
   function _initProxy(
@@ -181,6 +183,7 @@ contract ReinvestmentControllerInitializeTest is ReinvestmentControllerTestBase 
     uint256 depositTimelock_,
     uint256 maxInvest_,
     uint256 maxInvestBps_,
+    uint256 maxFee_,
     uint256 bufferBps_
   ) internal returns (ReinvestmentController) {
     TransparentUpgradeableProxy newProxy = new TransparentUpgradeableProxy(
@@ -188,7 +191,7 @@ contract ReinvestmentControllerInitializeTest is ReinvestmentControllerTestBase 
       proxyAdminOwner,
       abi.encodeCall(
         ReinvestmentController.initialize,
-        (admin_, depositTimelock_, maxInvest_, maxInvestBps_, bufferBps_)
+        (admin_, depositTimelock_, maxInvest_, maxInvestBps_, maxFee_, bufferBps_)
       )
     );
 

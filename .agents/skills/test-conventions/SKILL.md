@@ -131,8 +131,3 @@ contract ReinvestmentControllerInvestTest is ReinvestmentControllerTestBase {
   quotes, two-space indentation, and a 100 column width, configured in
   `.prettierrc`. Running `forge fmt` will fight that configuration on every
   file.
-- Remember that `vm.prank` and `vm.expectRevert` apply to the next call, and
-  that an intervening view call consumes them. Hoist reads into locals first,
-  as in `bytes32 role = controller.PAUSER_ROLE();` before the pranked
-  `grantRole`. Apply the same care to any `vm.expectRevert` whose call
-  arguments themselves make external calls.

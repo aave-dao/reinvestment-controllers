@@ -51,7 +51,7 @@ contract ReinvestmentControllerGetDriftTest is ReinvestmentControllerTestBase {
   function test_getDrift_zeroAfterDivest() public {
     _invest(100_000e6);
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(100_000e6, _encodeAttestation(_defaultTransferSpec(100_000e6)), hex'1234');
 
     assertEq(controller.getDrift(), 0);

@@ -41,7 +41,7 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
   // https://etherscan.io/address/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
   address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
 
-  uint256 internal constant DEPOSIT_TIMELOCK = 1 days;
+  uint256 internal constant INVEST_MIN_DELAY = 1 days;
   uint256 internal constant MAX_INVEST = 10_000_000e6;
   uint256 internal constant MAX_INVEST_BPS = 8_000;
   uint256 internal constant BUFFER_BPS = 1_000;
@@ -52,8 +52,8 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
   address internal proxyAdminOwner = makeAddr('proxyAdminOwner');
   address internal alice = makeAddr('alice');
 
-  address internal investor;
-  uint256 internal investorPrivateKey;
+  address internal keeper;
+  uint256 internal keeperPrivateKey;
   address internal circleSigner;
   uint256 internal circleSignerPrivateKey;
 
@@ -63,7 +63,7 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
   function setUp() public {
     vm.createSelectFork(vm.rpcUrl('mainnet'), FORK_BLOCK);
 
-    (investor, investorPrivateKey) = makeAddrAndKey('investor');
+    (keeper, keeperPrivateKey) = makeAddrAndKey('keeper');
     (circleSigner, circleSignerPrivateKey) = makeAddrAndKey('circleSigner');
 
     controller = ReinvestmentController(
@@ -73,27 +73,27 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
           proxyAdminOwner,
           abi.encodeCall(
             IReinvestmentController.initialize,
-            (admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS)
+            (admin, INVEST_MIN_DELAY, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS)
           )
         )
       )
     );
 
-    deal(USDC, investor, FEE_FUNDING);
-    vm.prank(investor);
+    deal(USDC, keeper, FEE_FUNDING);
+    vm.prank(keeper);
     IERC20(USDC).approve(address(controller), type(uint256).max);
 
     assetId = controller.ASSET_ID();
     _setPayloadContext(GATEWAY_WALLET, GATEWAY_MINTER, USDC, address(controller));
 
-    bytes32 investorRole = controller.INVESTOR_ROLE();
+    bytes32 keeperRole = controller.KEEPER_ROLE();
     vm.prank(admin);
-    controller.grantRole(investorRole, investor);
+    controller.grantRole(keeperRole, keeper);
 
     _pointHubAtTheController();
     _allowCircleSigner();
 
-    vm.warp(block.timestamp + DEPOSIT_TIMELOCK + 1);
+    vm.warp(block.timestamp + INVEST_MIN_DELAY + 1);
   }
 
   function test_invest() public {
@@ -106,7 +106,7 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
     vm.expectEmit(address(controller));
     emit IReinvestmentController.Invested(amount);
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(amount);
 
     assertGt(amount, 0);
@@ -125,7 +125,7 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
     uint256 amount = controller.getInvestableAmount() + 1;
 
     vm.expectRevert(IReinvestmentController.MaximumInvestAmountExceeded.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(amount);
   }
 
@@ -134,13 +134,13 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
     _pointHubAt(address(0));
 
     vm.expectRevert(IHub.OnlyReinvestmentController.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(amount);
   }
 
   function test_divest() public {
     uint256 invested = controller.getInvestableAmount();
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(invested);
     uint256 liquidityBefore = IHub(HUB).getAssetLiquidity(assetId);
     uint256 hubBalanceBefore = IERC20(USDC).balanceOf(HUB);
@@ -153,7 +153,7 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
     vm.expectEmit(address(controller));
     emit IReinvestmentController.Divested(amount, MAX_FEE);
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(amount, attestation, signature);
 
     assertEq(IHub(HUB).getAssetLiquidity(assetId), liquidityBefore + invested);
@@ -161,40 +161,40 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
     assertEq(controller.getInvestedAmount(), 0);
     assertEq(IERC20(USDC).balanceOf(HUB), hubBalanceBefore + invested);
     assertEq(IERC20(USDC).balanceOf(address(controller)), 0);
-    assertEq(IERC20(USDC).balanceOf(investor), FEE_FUNDING - MAX_FEE);
+    assertEq(IERC20(USDC).balanceOf(keeper), FEE_FUNDING - MAX_FEE);
   }
 
   function test_divest_revertsWith_InsufficientLiquidity() public {
     uint256 amount = controller.getInvestableAmount();
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(amount);
     (bytes memory attestation, bytes memory signature) = _attest(amount + 1);
 
     vm.expectRevert(IReinvestmentController.InsufficientLiquidity.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(amount + 1, attestation, signature);
   }
 
   function test_divest_revertsWith_InvalidAttestationSigner() public {
     uint256 invested = controller.getInvestableAmount();
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(invested);
 
     uint256 amount = invested - MAX_FEE;
     bytes memory attestation = _encodeAttestation(_defaultTransferSpec(amount));
     (uint8 v, bytes32 r, bytes32 s) = vm.sign(
-      investorPrivateKey,
+      keeperPrivateKey,
       MessageHashUtils.toEthSignedMessageHash(keccak256(attestation))
     );
 
     vm.expectRevert(IMintsErrors.InvalidAttestationSigner.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(amount, attestation, abi.encodePacked(r, s, v));
   }
 
   function test_initiateWithdrawal() public {
     uint256 amount = controller.getInvestableAmount();
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(amount);
 
     vm.startPrank(admin);
@@ -215,7 +215,7 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
 
   function test_withdraw() public {
     uint256 amount = controller.getInvestableAmount();
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(amount);
     uint256 liquidityBefore = IHub(HUB).getAssetLiquidity(assetId);
     uint256 hubBalanceBefore = IERC20(USDC).balanceOf(HUB);
@@ -243,10 +243,10 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
 
   function test_isValidSignature() public {
     uint256 amount = controller.getInvestableAmount();
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(amount);
     (bytes32 digest, bytes memory signature) = _signBurnIntent(
-      investorPrivateKey,
+      keeperPrivateKey,
       _encodeBurnIntent(_defaultTransferSpec(amount))
     );
 
@@ -255,10 +255,10 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
 
   function test_isValidSignature_revertsWith_HashMismatch() public {
     uint256 amount = controller.getInvestableAmount();
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(amount);
     (, bytes memory signature) = _signBurnIntent(
-      investorPrivateKey,
+      keeperPrivateKey,
       _encodeBurnIntent(_defaultTransferSpec(amount))
     );
 
@@ -268,10 +268,10 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
 
   function test_isValidSignature_revertsWith_BurnIntentExceedsBalance() public {
     uint256 amount = controller.getInvestableAmount();
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(amount);
     (bytes32 digest, bytes memory signature) = _signBurnIntent(
-      investorPrivateKey,
+      keeperPrivateKey,
       _encodeBurnIntent(_defaultTransferSpec(amount + 1))
     );
 
@@ -283,7 +283,7 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
     amount = bound(amount, 1, controller.getInvestableAmount());
     uint256 liquidityBefore = IHub(HUB).getAssetLiquidity(assetId);
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(amount);
 
     assertEq(IHub(HUB).getAssetSwept(assetId), amount);

@@ -26,7 +26,7 @@ Older Aave repositories vary and are not authoritative; do not copy them.
    - Use `test_<fn>_revertsWith_<ExactErrorName>`, where the error name is the
      selector name in PascalCase, copied exactly.
    - Prefer `test_invest_revertsWith_AccessControlUnauthorizedAccount` over
-     `test_invest_revertsWith_callerIsNotInvestor`.
+     `test_invest_revertsWith_callerIsNotKeeper`.
    - When several tests expect the same error, append context after the error
      name, for example
      `test_divest_revertsWith_InvalidAmount_amountIsZero`.
@@ -91,7 +91,7 @@ contract ReinvestmentControllerInvestTest is ReinvestmentControllerTestBase {
       abi.encodeWithSelector(
         IAccessControl.AccessControlUnauthorizedAccount.selector,
         address(this),
-        controller.INVESTOR_ROLE()
+        controller.KEEPER_ROLE()
       )
     );
     controller.invest(1e6);

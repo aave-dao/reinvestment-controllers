@@ -96,7 +96,7 @@ contract ReinvestmentControllerGetInvestableAmountTest is ReinvestmentController
   }
 
   function test_getInvestableAmount_reducedBySweptBalance() public {
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(100_000e6);
 
     assertEq(controller.getInvestableAmount(), INVESTABLE - 100_000e6);
@@ -115,19 +115,19 @@ contract ReinvestmentControllerGetInvestableAmountTest is ReinvestmentController
   }
 
   function test_getInvestableAmount_tracksInvestAndDivest() public {
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(100_000e6);
 
     assertEq(controller.getInvestableAmount(), INVESTABLE - 100_000e6);
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(40_000e6, _encodeAttestation(_defaultTransferSpec(40_000e6)), hex'1234');
 
     assertEq(controller.getInvestableAmount(), INVESTABLE - 60_000e6);
   }
 
   function test_getInvestableAmount_ignoresWithdrawingBalance() public {
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(100_000e6);
 
     vm.prank(pauser);

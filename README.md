@@ -11,7 +11,7 @@ implementation; limits and roles are set in `initialize`.
 - `invest` — sweeps from the Hub and deposits into the Gateway wallet
 - `divest` — mints against a Circle attestation and reclaims to the Hub
 - `initiateWithdrawal` / `withdraw` — on-chain exit path, subject to the Gateway's delay
-- `isValidSignature` — ERC-1271, authorises burn intents signed by an `INVESTOR_ROLE` holder
+- `isValidSignature` — ERC-1271, authorises burn intents signed by a `KEEPER_ROLE` holder
 
 How much can be invested is bounded by `maxInvest`, `maxInvestBps` and a `bufferBps` of Hub
 liquidity that must stay idle. Set `maxInvest` to zero to sunset.

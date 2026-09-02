@@ -21,7 +21,7 @@ contract ReinvestmentControllerInvariantsTest is ReinvestmentControllerTestBase 
       wallet,
       usdc,
       admin,
-      investor,
+      keeper,
       pauser
     );
 

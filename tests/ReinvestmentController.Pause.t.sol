@@ -65,17 +65,17 @@ contract ReinvestmentControllerPauseTest is ReinvestmentControllerTestBase {
     controller.pause();
   }
 
-  function test_pause_revertsWith_AccessControlUnauthorizedAccount_investorIsNotPauser() public {
+  function test_pause_revertsWith_AccessControlUnauthorizedAccount_keeperIsNotPauser() public {
     bytes32 pauserRole = controller.PAUSER_ROLE();
 
     vm.expectRevert(
       abi.encodeWithSelector(
         IAccessControl.AccessControlUnauthorizedAccount.selector,
-        investor,
+        keeper,
         pauserRole
       )
     );
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.pause();
   }
 

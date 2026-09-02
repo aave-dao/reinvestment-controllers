@@ -47,11 +47,11 @@ contract ReinvestmentControllerSetBufferBpsTest is ReinvestmentControllerTestBas
     vm.expectRevert(
       abi.encodeWithSelector(
         IAccessControl.AccessControlUnauthorizedAccount.selector,
-        investor,
+        keeper,
         adminRole
       )
     );
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.setBufferBps(2_500);
   }
 

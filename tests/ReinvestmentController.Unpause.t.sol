@@ -30,7 +30,7 @@ contract ReinvestmentControllerUnpauseTest is ReinvestmentControllerTestBase {
     vm.prank(admin);
     controller.unpause();
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(1_000e6);
 
     assertEq(controller.getInvestedAmount(), 1_000e6);
@@ -79,7 +79,7 @@ contract ReinvestmentControllerUnpauseTest is ReinvestmentControllerTestBase {
     vm.prank(admin);
     controller.unpause();
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(1_000e6);
 
     vm.prank(pauser);
@@ -97,7 +97,7 @@ contract ReinvestmentControllerUnpauseTest is ReinvestmentControllerTestBase {
     vm.prank(admin);
     controller.unpause();
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(1_000e6);
 
     vm.prank(pauser);

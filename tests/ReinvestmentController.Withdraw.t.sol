@@ -61,7 +61,7 @@ contract ReinvestmentControllerWithdrawTest is ReinvestmentControllerTestBase {
     vm.prank(admin);
     controller.unpause();
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(100_000e6, _encodeAttestation(_defaultTransferSpec(100_000e6)), hex'1234');
 
     vm.prank(pauser);
@@ -109,11 +109,11 @@ contract ReinvestmentControllerWithdrawTest is ReinvestmentControllerTestBase {
     vm.expectRevert(
       abi.encodeWithSelector(
         IAccessControl.AccessControlUnauthorizedAccount.selector,
-        investor,
+        keeper,
         adminRole
       )
     );
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.withdraw();
   }
 

@@ -20,14 +20,14 @@ contract ReinvestmentControllerConstructorTest is ReinvestmentControllerTestBase
   }
 
   function test_constructor_definesDistinctRoleIdentifiers() public view {
-    assertEq(implementation.INVESTOR_ROLE(), keccak256('INVESTOR_ROLE'));
+    assertEq(implementation.KEEPER_ROLE(), keccak256('KEEPER_ROLE'));
     assertEq(implementation.PAUSER_ROLE(), keccak256('PAUSER_ROLE'));
-    assertTrue(implementation.INVESTOR_ROLE() != implementation.PAUSER_ROLE());
-    assertTrue(implementation.INVESTOR_ROLE() != implementation.DEFAULT_ADMIN_ROLE());
+    assertTrue(implementation.KEEPER_ROLE() != implementation.PAUSER_ROLE());
+    assertTrue(implementation.KEEPER_ROLE() != implementation.DEFAULT_ADMIN_ROLE());
   }
 
   function test_constructor_leavesImplementationUnconfigured() public view {
-    assertEq(implementation.depositTimelock(), 0);
+    assertEq(implementation.investMinDelay(), 0);
     assertEq(implementation.maxInvest(), 0);
     assertEq(implementation.maxInvestBps(), 0);
     assertEq(implementation.bufferBps(), 0);
@@ -53,7 +53,7 @@ contract ReinvestmentControllerConstructorTest is ReinvestmentControllerTestBase
     vm.expectRevert(Initializable.InvalidInitialization.selector);
     implementation.initialize(
       admin,
-      DEPOSIT_TIMELOCK,
+      INVEST_MIN_DELAY,
       MAX_INVEST,
       MAX_INVEST_BPS,
       MAX_FEE,

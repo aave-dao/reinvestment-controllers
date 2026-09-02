@@ -16,7 +16,7 @@ contract ReinvestmentControllerGetInvestedAmountTest is ReinvestmentControllerTe
   }
 
   function test_getInvestedAmount_tracksTheHubSweptBalance() public {
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(75_000e6);
 
     assertEq(controller.getInvestedAmount(), 75_000e6);
@@ -24,17 +24,17 @@ contract ReinvestmentControllerGetInvestedAmountTest is ReinvestmentControllerTe
   }
 
   function test_getInvestedAmount_reducedByDivest() public {
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(75_000e6);
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(25_000e6, _encodeAttestation(_defaultTransferSpec(25_000e6)), hex'1234');
 
     assertEq(controller.getInvestedAmount(), 50_000e6);
   }
 
   function test_getInvestedAmount_includesWithdrawingBalance() public {
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(75_000e6);
 
     vm.prank(pauser);
@@ -48,7 +48,7 @@ contract ReinvestmentControllerGetInvestedAmountTest is ReinvestmentControllerTe
   }
 
   function test_getInvestedAmount_zeroAfterWithdrawalCompletes() public {
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(75_000e6);
 
     vm.prank(pauser);

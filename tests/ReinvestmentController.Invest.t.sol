@@ -16,7 +16,7 @@ contract ReinvestmentControllerInvestTest is ReinvestmentControllerTestBase {
     vm.expectEmit(address(controller));
     emit IReinvestmentController.Invested(INVESTABLE);
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(INVESTABLE);
 
     assertEq(hub.getAssetSwept(assetId), INVESTABLE);
@@ -35,7 +35,7 @@ contract ReinvestmentControllerInvestTest is ReinvestmentControllerTestBase {
   function test_invest(uint256 amount) public {
     amount = bound(amount, 1, INVESTABLE);
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(amount);
 
     assertEq(controller.getInvestedAmount(), amount);
@@ -52,7 +52,7 @@ contract ReinvestmentControllerInvestTest is ReinvestmentControllerTestBase {
   }
 
   function test_invest_partialAmountLeavesRemainingHeadroom() public {
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(INVESTABLE / 4);
 
     assertEq(controller.getInvestableAmount(), INVESTABLE - INVESTABLE / 4);
@@ -64,62 +64,62 @@ contract ReinvestmentControllerInvestTest is ReinvestmentControllerTestBase {
 
     uint256 investable = controller.getInvestableAmount();
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(investable);
 
     assertEq(investable, SUPPLIED - BUFFER);
     assertEq(hub.getAssetLiquidity(assetId), BUFFER);
   }
 
-  function test_invest_afterTimelockElapses() public {
-    vm.prank(investor);
+  function test_invest_afterMinDelayElapses() public {
+    vm.prank(keeper);
     controller.invest(1_000e6);
 
-    vm.warp(block.timestamp + DEPOSIT_TIMELOCK + 1);
+    vm.warp(block.timestamp + INVEST_MIN_DELAY + 1);
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(2_000e6);
 
     assertEq(controller.getInvestedAmount(), 3_000e6);
     assertEq(wallet.availableBalance(address(usdc), address(controller)), 3_000e6);
   }
 
-  function test_invest_afterAnyElapsedTimelock(uint256 elapsed) public {
-    elapsed = bound(elapsed, DEPOSIT_TIMELOCK + 1, 365 days);
+  function test_invest_afterAnyElapsedMinDelay(uint256 elapsed) public {
+    elapsed = bound(elapsed, INVEST_MIN_DELAY + 1, 365 days);
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(1_000e6);
 
     vm.warp(block.timestamp + elapsed);
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(1_000e6);
 
     assertEq(controller.getInvestedAmount(), 2_000e6);
   }
 
   function test_invest_revertsWith_AccessControlUnauthorizedAccount() public {
-    bytes32 investorRole = controller.INVESTOR_ROLE();
+    bytes32 keeperRole = controller.KEEPER_ROLE();
 
     vm.expectRevert(
       abi.encodeWithSelector(
         IAccessControl.AccessControlUnauthorizedAccount.selector,
         alice,
-        investorRole
+        keeperRole
       )
     );
     vm.prank(alice);
     controller.invest(1_000e6);
   }
 
-  function test_invest_revertsWith_AccessControlUnauthorizedAccount_pauserIsNotInvestor() public {
-    bytes32 investorRole = controller.INVESTOR_ROLE();
+  function test_invest_revertsWith_AccessControlUnauthorizedAccount_pauserIsNotKeeper() public {
+    bytes32 keeperRole = controller.KEEPER_ROLE();
 
     vm.expectRevert(
       abi.encodeWithSelector(
         IAccessControl.AccessControlUnauthorizedAccount.selector,
         pauser,
-        investorRole
+        keeperRole
       )
     );
     vm.prank(pauser);
@@ -127,24 +127,24 @@ contract ReinvestmentControllerInvestTest is ReinvestmentControllerTestBase {
   }
 
   function test_invest_revertsWith_AccessControlUnauthorizedAccount_afterRoleRevoked() public {
-    bytes32 investorRole = controller.INVESTOR_ROLE();
+    bytes32 keeperRole = controller.KEEPER_ROLE();
 
     vm.prank(admin);
-    controller.revokeRole(investorRole, investor);
+    controller.revokeRole(keeperRole, keeper);
 
     vm.expectRevert(
       abi.encodeWithSelector(
         IAccessControl.AccessControlUnauthorizedAccount.selector,
-        investor,
-        investorRole
+        keeper,
+        keeperRole
       )
     );
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(1_000e6);
   }
 
   function test_invest_revertsWith_AccessControlUnauthorizedAccount_beforeEnforcedPause() public {
-    bytes32 investorRole = controller.INVESTOR_ROLE();
+    bytes32 keeperRole = controller.KEEPER_ROLE();
 
     vm.prank(pauser);
     controller.pause();
@@ -153,7 +153,7 @@ contract ReinvestmentControllerInvestTest is ReinvestmentControllerTestBase {
       abi.encodeWithSelector(
         IAccessControl.AccessControlUnauthorizedAccount.selector,
         alice,
-        investorRole
+        keeperRole
       )
     );
     vm.prank(alice);
@@ -165,7 +165,7 @@ contract ReinvestmentControllerInvestTest is ReinvestmentControllerTestBase {
     controller.pause();
 
     vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(1_000e6);
   }
 
@@ -174,62 +174,62 @@ contract ReinvestmentControllerInvestTest is ReinvestmentControllerTestBase {
     controller.pause();
 
     vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(0);
   }
 
-  function test_invest_revertsWith_DepositTimelock_beforeExpiry() public {
-    vm.prank(investor);
+  function test_invest_revertsWith_InvestMinDelayNotElapsed_beforeExpiry() public {
+    vm.prank(keeper);
     controller.invest(1_000e6);
 
-    vm.expectRevert(IReinvestmentController.DepositTimelock.selector);
-    vm.prank(investor);
-    controller.invest(1_000e6);
-  }
-
-  function test_invest_revertsWith_DepositTimelock_atExactExpiry() public {
-    vm.prank(investor);
-    controller.invest(1_000e6);
-
-    vm.warp(block.timestamp + DEPOSIT_TIMELOCK);
-
-    vm.expectRevert(IReinvestmentController.DepositTimelock.selector);
-    vm.prank(investor);
+    vm.expectRevert(IReinvestmentController.InvestMinDelayNotElapsed.selector);
+    vm.prank(keeper);
     controller.invest(1_000e6);
   }
 
-  function test_invest_revertsWith_DepositTimelock_beforeInvalidAmount() public {
-    vm.prank(investor);
+  function test_invest_revertsWith_InvestMinDelayNotElapsed_atExactExpiry() public {
+    vm.prank(keeper);
     controller.invest(1_000e6);
 
-    vm.expectRevert(IReinvestmentController.DepositTimelock.selector);
-    vm.prank(investor);
+    vm.warp(block.timestamp + INVEST_MIN_DELAY);
+
+    vm.expectRevert(IReinvestmentController.InvestMinDelayNotElapsed.selector);
+    vm.prank(keeper);
+    controller.invest(1_000e6);
+  }
+
+  function test_invest_revertsWith_InvestMinDelayNotElapsed_beforeInvalidAmount() public {
+    vm.prank(keeper);
+    controller.invest(1_000e6);
+
+    vm.expectRevert(IReinvestmentController.InvestMinDelayNotElapsed.selector);
+    vm.prank(keeper);
     controller.invest(0);
   }
 
-  function test_invest_revertsWith_DepositTimelock_afterTimelockIsExtended() public {
-    vm.prank(investor);
+  function test_invest_revertsWith_InvestMinDelayNotElapsed_afterMinDelayIsExtended() public {
+    vm.prank(keeper);
     controller.invest(1_000e6);
 
     vm.prank(admin);
-    controller.setDepositTimelock(30 days);
+    controller.setInvestMinDelay(30 days);
 
-    vm.warp(block.timestamp + DEPOSIT_TIMELOCK + 1);
+    vm.warp(block.timestamp + INVEST_MIN_DELAY + 1);
 
-    vm.expectRevert(IReinvestmentController.DepositTimelock.selector);
-    vm.prank(investor);
+    vm.expectRevert(IReinvestmentController.InvestMinDelayNotElapsed.selector);
+    vm.prank(keeper);
     controller.invest(1_000e6);
   }
 
   function test_invest_revertsWith_InvalidAmount() public {
     vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(0);
   }
 
   function test_invest_revertsWith_MaximumInvestAmountExceeded_aboveInvestable() public {
     vm.expectRevert(IReinvestmentController.MaximumInvestAmountExceeded.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(INVESTABLE + 1);
   }
 
@@ -238,7 +238,7 @@ contract ReinvestmentControllerInvestTest is ReinvestmentControllerTestBase {
     controller.setMaxInvest(0);
 
     vm.expectRevert(IReinvestmentController.MaximumInvestAmountExceeded.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(1);
   }
 
@@ -246,18 +246,18 @@ contract ReinvestmentControllerInvestTest is ReinvestmentControllerTestBase {
     hub.setAccounting(SUPPLIED, BUFFER, 0);
 
     vm.expectRevert(IReinvestmentController.MaximumInvestAmountExceeded.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(1);
   }
 
   function test_invest_revertsWith_MaximumInvestAmountExceeded_capRoomExhausted() public {
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(INVESTABLE);
 
-    vm.warp(block.timestamp + DEPOSIT_TIMELOCK + 1);
+    vm.warp(block.timestamp + INVEST_MIN_DELAY + 1);
 
     vm.expectRevert(IReinvestmentController.MaximumInvestAmountExceeded.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(1);
   }
 }

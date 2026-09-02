@@ -40,11 +40,11 @@ contract ReinvestmentControllerSetMaxInvestBpsTest is ReinvestmentControllerTest
     vm.expectRevert(
       abi.encodeWithSelector(
         IAccessControl.AccessControlUnauthorizedAccount.selector,
-        investor,
+        keeper,
         adminRole
       )
     );
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.setMaxInvestBps(1_000);
   }
 

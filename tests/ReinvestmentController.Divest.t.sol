@@ -29,7 +29,7 @@ contract ReinvestmentControllerDivestTest is ReinvestmentControllerTestBase {
     vm.expectEmit(address(controller));
     emit IReinvestmentController.Divested(amount, MAX_FEE);
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(amount, attestation, signature);
 
     assertEq(hub.getAssetSwept(assetId), INVESTED - amount);
@@ -44,7 +44,7 @@ contract ReinvestmentControllerDivestTest is ReinvestmentControllerTestBase {
   function test_divest(uint256 amount) public {
     amount = bound(amount, 1, INVESTED);
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(amount, _encodeAttestation(_defaultTransferSpec(amount)), hex'1234');
 
     assertEq(controller.getInvestedAmount(), INVESTED - amount);
@@ -53,7 +53,7 @@ contract ReinvestmentControllerDivestTest is ReinvestmentControllerTestBase {
   }
 
   function test_divest_fullSweptBalance() public {
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(INVESTED, _encodeAttestation(_defaultTransferSpec(INVESTED)), hex'1234');
 
     assertEq(controller.getInvestedAmount(), 0);
@@ -72,17 +72,17 @@ contract ReinvestmentControllerDivestTest is ReinvestmentControllerTestBase {
   function test_divest_restoresInvestableHeadroom() public {
     uint256 investableBefore = controller.getInvestableAmount();
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(1_000e6, _encodeAttestation(_defaultTransferSpec(1_000e6)), hex'1234');
 
     assertEq(controller.getInvestableAmount(), investableBefore + 1_000e6);
   }
 
-  function test_divest_isNotSubjectToDepositTimelock() public {
-    vm.prank(investor);
+  function test_divest_isNotSubjectToInvestMinDelay() public {
+    vm.prank(keeper);
     controller.divest(1_000e6, _encodeAttestation(_defaultTransferSpec(1_000e6)), hex'1234');
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(1_000e6, _encodeAttestation(_defaultTransferSpec(1_000e6)), hex'1234');
 
     assertEq(controller.getInvestedAmount(), INVESTED - 2_000e6);
@@ -94,18 +94,18 @@ contract ReinvestmentControllerDivestTest is ReinvestmentControllerTestBase {
 
     vm.expectCall(address(minter), abi.encodeCall(minter.gatewayMint, (attestation, signature)));
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(1_000e6, attestation, signature);
   }
 
   function test_divest_revertsWith_AccessControlUnauthorizedAccount() public {
-    bytes32 investorRole = controller.INVESTOR_ROLE();
+    bytes32 keeperRole = controller.KEEPER_ROLE();
 
     vm.expectRevert(
       abi.encodeWithSelector(
         IAccessControl.AccessControlUnauthorizedAccount.selector,
         alice,
-        investorRole
+        keeperRole
       )
     );
     vm.prank(alice);
@@ -119,13 +119,13 @@ contract ReinvestmentControllerDivestTest is ReinvestmentControllerTestBase {
     controller.pause();
 
     vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(1_000e6, attestation, hex'1234');
   }
 
   function test_divest_revertsWith_InvalidAmount() public {
     vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(0, _encodeAttestation(_defaultTransferSpec(0)), hex'1234');
   }
 
@@ -133,7 +133,7 @@ contract ReinvestmentControllerDivestTest is ReinvestmentControllerTestBase {
     bytes memory attestation = _encodeAttestation(_defaultTransferSpec(INVESTED + 1));
 
     vm.expectRevert(IReinvestmentController.InsufficientLiquidity.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(INVESTED + 1, attestation, hex'1234');
   }
 
@@ -142,7 +142,7 @@ contract ReinvestmentControllerDivestTest is ReinvestmentControllerTestBase {
     spec.sourceToken = _toBytes32(makeAddr('otherToken'));
 
     vm.expectRevert(IReinvestmentController.InsufficientLiquidity.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(INVESTED + 1, _encodeAttestation(spec), hex'1234');
   }
 
@@ -152,25 +152,25 @@ contract ReinvestmentControllerDivestTest is ReinvestmentControllerTestBase {
     specs[1] = _defaultTransferSpec(1_000e6);
 
     vm.expectRevert(IReinvestmentController.InvalidElementCount.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(2_000e6, _encodeAttestationSet(specs), hex'1234');
   }
 
   function test_divest_revertsWith_InvalidElementCount_emptyAttestationSet() public {
     vm.expectRevert(IReinvestmentController.InvalidElementCount.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(1_000e6, _encodeAttestationSet(new TransferSpec[](0)), hex'1234');
   }
 
   function test_divest_revertsWith_InvalidMintAmount_attestationValueBelowAmount() public {
     vm.expectRevert(IReinvestmentController.InvalidMintAmount.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(2_000e6, _encodeAttestation(_defaultTransferSpec(1_000e6)), hex'1234');
   }
 
   function test_divest_revertsWith_InvalidMintAmount_attestationValueAboveAmount() public {
     vm.expectRevert(IReinvestmentController.InvalidMintAmount.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(1_000e6, _encodeAttestation(_defaultTransferSpec(2_000e6)), hex'1234');
   }
 
@@ -179,7 +179,7 @@ contract ReinvestmentControllerDivestTest is ReinvestmentControllerTestBase {
     spec.destinationDomain = 1;
 
     vm.expectRevert(IReinvestmentController.CrossChainTransferNotAllowed.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(1_000e6, _encodeAttestation(spec), hex'1234');
   }
 
@@ -188,7 +188,7 @@ contract ReinvestmentControllerDivestTest is ReinvestmentControllerTestBase {
     spec.sourceToken = _toBytes32(makeAddr('otherToken'));
 
     vm.expectRevert(IReinvestmentController.InvalidSourceToken.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(1_000e6, _encodeAttestation(spec), hex'1234');
   }
 
@@ -197,7 +197,7 @@ contract ReinvestmentControllerDivestTest is ReinvestmentControllerTestBase {
     spec.destinationToken = _toBytes32(makeAddr('otherToken'));
 
     vm.expectRevert(IReinvestmentController.InvalidDestinationToken.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(1_000e6, _encodeAttestation(spec), hex'1234');
   }
 
@@ -206,7 +206,7 @@ contract ReinvestmentControllerDivestTest is ReinvestmentControllerTestBase {
     spec.sourceDepositor = _toBytes32(alice);
 
     vm.expectRevert(IReinvestmentController.InvalidDepositor.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(1_000e6, _encodeAttestation(spec), hex'1234');
   }
 
@@ -215,16 +215,16 @@ contract ReinvestmentControllerDivestTest is ReinvestmentControllerTestBase {
     spec.destinationRecipient = _toBytes32(alice);
 
     vm.expectRevert(IReinvestmentController.InvalidRecipient.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(1_000e6, _encodeAttestation(spec), hex'1234');
   }
 
   function test_divest_revertsWith_InvalidSigner() public {
     TransferSpec memory spec = _defaultTransferSpec(1_000e6);
-    spec.sourceSigner = _toBytes32(investor);
+    spec.sourceSigner = _toBytes32(keeper);
 
     vm.expectRevert(IReinvestmentController.InvalidSigner.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(1_000e6, _encodeAttestation(spec), hex'1234');
   }
 
@@ -233,7 +233,7 @@ contract ReinvestmentControllerDivestTest is ReinvestmentControllerTestBase {
     spec.destinationCaller = bytes32(0);
 
     vm.expectRevert(IReinvestmentController.InvalidDestinationCaller.selector);
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(1_000e6, _encodeAttestation(spec), hex'1234');
   }
 }

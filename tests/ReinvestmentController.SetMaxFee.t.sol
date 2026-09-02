@@ -40,7 +40,7 @@ contract ReinvestmentControllerSetMaxFeeTest is ReinvestmentControllerTestBase {
     controller.setMaxFee(NEW_MAX_FEE);
 
     bytes memory intent = _encodeBurnIntent(_defaultTransferSpec(1_000e6), NEW_MAX_FEE);
-    (bytes32 digest, bytes memory signature) = _signBurnIntent(investorPrivateKey, intent);
+    (bytes32 digest, bytes memory signature) = _signBurnIntent(keeperPrivateKey, intent);
 
     assertEq(controller.isValidSignature(digest, signature), IERC1271.isValidSignature.selector);
   }
@@ -52,7 +52,7 @@ contract ReinvestmentControllerSetMaxFeeTest is ReinvestmentControllerTestBase {
     vm.stopPrank();
 
     bytes memory intent = _encodeBurnIntent(_defaultTransferSpec(1_000e6), 1);
-    (bytes32 digest, bytes memory signature) = _signBurnIntent(investorPrivateKey, intent);
+    (bytes32 digest, bytes memory signature) = _signBurnIntent(keeperPrivateKey, intent);
 
     assertEq(controller.maxFee(), 0);
 
@@ -64,8 +64,8 @@ contract ReinvestmentControllerSetMaxFeeTest is ReinvestmentControllerTestBase {
     vm.prank(admin);
     controller.setMaxFee(NEW_MAX_FEE);
 
-    usdc.mint(investor, NEW_MAX_FEE);
-    vm.prank(investor);
+    usdc.mint(keeper, NEW_MAX_FEE);
+    vm.prank(keeper);
     usdc.approve(address(controller), NEW_MAX_FEE);
 
     uint256 amount = 100_000e6;
@@ -73,10 +73,10 @@ contract ReinvestmentControllerSetMaxFeeTest is ReinvestmentControllerTestBase {
     vm.expectEmit(address(controller));
     emit IReinvestmentController.Divested(amount, NEW_MAX_FEE);
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(amount, _encodeAttestation(_defaultTransferSpec(amount)), hex'1234');
 
-    assertEq(usdc.balanceOf(investor), 0);
+    assertEq(usdc.balanceOf(keeper), 0);
     assertEq(controller.getInvestedAmount(), INVESTED - amount - NEW_MAX_FEE);
     assertEq(hub.getAssetLiquidity(assetId), SUPPLIED - INVESTED + amount + NEW_MAX_FEE);
   }
@@ -87,11 +87,11 @@ contract ReinvestmentControllerSetMaxFeeTest is ReinvestmentControllerTestBase {
     vm.expectRevert(
       abi.encodeWithSelector(
         IAccessControl.AccessControlUnauthorizedAccount.selector,
-        investor,
+        keeper,
         adminRole
       )
     );
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.setMaxFee(NEW_MAX_FEE);
   }
 }

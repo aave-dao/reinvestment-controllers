@@ -33,7 +33,7 @@ contract ReinvestmentController is
   using PercentageMath for uint256;
 
   /// @inheritdoc IReinvestmentController
-  bytes32 public constant INVESTOR_ROLE = keccak256('INVESTOR_ROLE');
+  bytes32 public constant KEEPER_ROLE = keccak256('KEEPER_ROLE');
 
   /// @inheritdoc IReinvestmentController
   bytes32 public constant PAUSER_ROLE = keccak256('PAUSER_ROLE');
@@ -53,11 +53,11 @@ contract ReinvestmentController is
   /// @inheritdoc IReinvestmentController
   uint256 public immutable ASSET_ID;
 
-  /// @dev Time before a new deposit can be performed (in seconds)
-  uint256 private _depositTimelock;
+  /// @dev Minimum time that must elapse between invests (in seconds)
+  uint256 private _investMinDelay;
 
-  /// @dev Timestamp of last deposit
-  uint256 private _depositLastUpdate;
+  /// @dev Timestamp of last invest
+  uint256 private _lastInvestTimestamp;
 
   /// @dev Buffer of uninvested funds on Hub (in BPS)
   uint256 private _bufferBps;
@@ -101,11 +101,11 @@ contract ReinvestmentController is
   /// @inheritdoc IReinvestmentController
   function initialize(
     address admin,
-    uint256 depositTimelock_,
-    uint256 maxInvest_,
-    uint256 maxInvestBps_,
-    uint256 maxFee_,
-    uint256 bufferBps_
+    uint256 investMinDelay,
+    uint256 maxInvest,
+    uint256 maxInvestBps,
+    uint256 maxFee,
+    uint256 bufferBps
   ) external initializer {
     require(admin != address(0), InvalidZeroAddress());
 
@@ -113,23 +113,23 @@ contract ReinvestmentController is
     __Pausable_init();
 
     _grantRole(DEFAULT_ADMIN_ROLE, admin);
-    _grantRole(INVESTOR_ROLE, admin);
+    _grantRole(KEEPER_ROLE, admin);
     _grantRole(PAUSER_ROLE, admin);
 
-    _setDepositTimelock(depositTimelock_);
-    _setMaxInvest(maxInvest_);
-    _setMaxInvestBps(maxInvestBps_);
-    _setMaxFee(maxFee_);
-    _setBufferBps(bufferBps_);
+    _setInvestMinDelay(investMinDelay);
+    _setMaxInvest(maxInvest);
+    _setMaxInvestBps(maxInvestBps);
+    _setMaxFee(maxFee);
+    _setBufferBps(bufferBps);
   }
 
   /// @inheritdoc IReinvestmentController
-  function invest(uint256 amount) external onlyRole(INVESTOR_ROLE) whenNotPaused {
-    require(block.timestamp > _depositLastUpdate + _depositTimelock, DepositTimelock());
+  function invest(uint256 amount) external onlyRole(KEEPER_ROLE) whenNotPaused {
+    require(block.timestamp > _lastInvestTimestamp + _investMinDelay, InvestMinDelayNotElapsed());
     require(amount > 0, InvalidAmount());
     require(amount <= _getInvestableAmount(), MaximumInvestAmountExceeded());
 
-    _depositLastUpdate = block.timestamp;
+    _lastInvestTimestamp = block.timestamp;
 
     HUB.sweep(ASSET_ID, amount);
     USDC.forceApprove(address(GATEWAY_WALLET), amount);
@@ -143,7 +143,7 @@ contract ReinvestmentController is
     uint256 amount,
     bytes memory attestationPayload,
     bytes memory signature
-  ) external onlyRole(INVESTOR_ROLE) whenNotPaused {
+  ) external onlyRole(KEEPER_ROLE) whenNotPaused {
     require(amount > 0, InvalidAmount());
 
     uint256 fee = _maxFee;
@@ -212,8 +212,8 @@ contract ReinvestmentController is
   }
 
   /// @inheritdoc IReinvestmentController
-  function setDepositTimelock(uint256 depositTimelock_) external onlyRole(DEFAULT_ADMIN_ROLE) {
-    _setDepositTimelock(depositTimelock_);
+  function setInvestMinDelay(uint256 investMinDelay_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    _setInvestMinDelay(investMinDelay_);
   }
 
   /// @inheritdoc IReinvestmentController
@@ -256,8 +256,8 @@ contract ReinvestmentController is
   }
 
   /// @inheritdoc IReinvestmentController
-  function depositTimelock() external view returns (uint256) {
-    return _depositTimelock;
+  function investMinDelay() external view returns (uint256) {
+    return _investMinDelay;
   }
 
   /// @inheritdoc IReinvestmentController
@@ -299,21 +299,21 @@ contract ReinvestmentController is
     require(digest == hash_, HashMismatch());
 
     address recoveredSigner = ECDSA.recover(digest, adminSignature);
-    require(hasRole(INVESTOR_ROLE, recoveredSigner), InvalidSignature());
+    require(hasRole(KEEPER_ROLE, recoveredSigner), InvalidSignature());
 
     _validateBurnIntent(burnIntentPayload);
 
     return IERC1271.isValidSignature.selector;
   }
 
-  /// @dev Sets a new deposit timelock (in seconds)
-  /// @param depositTimelock_ The new deposit timelock amount (in seconds)
-  function _setDepositTimelock(uint256 depositTimelock_) internal {
-    require(depositTimelock_ > 0, InvalidAmount());
+  /// @dev Sets a new minimum delay between invests (in seconds)
+  /// @param investMinDelay_ The new minimum delay between invests (in seconds)
+  function _setInvestMinDelay(uint256 investMinDelay_) internal {
+    require(investMinDelay_ > 0, InvalidAmount());
 
-    uint256 oldDepositTimelock = _depositTimelock;
-    _depositTimelock = depositTimelock_;
-    emit SetDepositTimelock(oldDepositTimelock, depositTimelock_);
+    uint256 oldInvestMinDelay = _investMinDelay;
+    _investMinDelay = investMinDelay_;
+    emit SetInvestMinDelay(oldInvestMinDelay, investMinDelay_);
   }
 
   /// @dev Sets the minimum amount of buffer that must be left on the Hub uninvested (in BPS)

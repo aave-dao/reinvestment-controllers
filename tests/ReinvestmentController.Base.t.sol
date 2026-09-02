@@ -17,7 +17,7 @@ import {GatewayPayloads} from './utils/GatewayPayloads.sol';
 
 abstract contract ReinvestmentControllerTestBase is Test, GatewayPayloads {
   uint256 internal constant WITHDRAWAL_DELAY = 7;
-  uint256 internal constant DEPOSIT_TIMELOCK = 1 days;
+  uint256 internal constant INVEST_MIN_DELAY = 1 days;
   uint256 internal constant MAX_INVEST = 10_000_000e6;
   uint256 internal constant MAX_INVEST_BPS = 8_000;
   uint256 internal constant BUFFER_BPS = 1_000;
@@ -40,8 +40,8 @@ abstract contract ReinvestmentControllerTestBase is Test, GatewayPayloads {
 
   address internal admin;
   uint256 internal adminPrivateKey;
-  address internal investor;
-  uint256 internal investorPrivateKey;
+  address internal keeper;
+  uint256 internal keeperPrivateKey;
   address internal pauser;
   address internal alice;
   uint256 internal alicePrivateKey;
@@ -51,7 +51,7 @@ abstract contract ReinvestmentControllerTestBase is Test, GatewayPayloads {
     vm.roll(21_000_000);
 
     (admin, adminPrivateKey) = makeAddrAndKey('admin');
-    (investor, investorPrivateKey) = makeAddrAndKey('investor');
+    (keeper, keeperPrivateKey) = makeAddrAndKey('keeper');
     (alice, alicePrivateKey) = makeAddrAndKey('alice');
     pauser = makeAddr('pauser');
 
@@ -76,7 +76,7 @@ abstract contract ReinvestmentControllerTestBase is Test, GatewayPayloads {
           address(implementation),
           abi.encodeCall(
             IReinvestmentController.initialize,
-            (admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS)
+            (admin, INVEST_MIN_DELAY, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS)
           )
         )
       )
@@ -87,17 +87,17 @@ abstract contract ReinvestmentControllerTestBase is Test, GatewayPayloads {
     hub.setReinvestmentController(address(controller));
     hub.add(SUPPLIED);
 
-    bytes32 investorRole = controller.INVESTOR_ROLE();
+    bytes32 keeperRole = controller.KEEPER_ROLE();
     bytes32 pauserRole = controller.PAUSER_ROLE();
 
     vm.startPrank(admin);
-    controller.grantRole(investorRole, investor);
+    controller.grantRole(keeperRole, keeper);
     controller.grantRole(pauserRole, pauser);
     vm.stopPrank();
   }
 
   function _invest(uint256 amount) internal {
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(amount);
   }
 

@@ -13,6 +13,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      FOUNDRY_PROFILE: ${{ github.event_name == 'pull_request' && 'pr' || github.ref == 'refs/heads/main' && 'ci' || 'default' }}
+      RPC_MAINNET: ${{ secrets.RPC_MAINNET }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -25,8 +28,17 @@ jobs:
       - name: Show Forge version
         run: forge --version
 
-      - name: Run Forge fmt
-        run: forge fmt --check
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run lint
+        run: npm run lint
 
       - name: Run Forge build
         run: forge build --sizes

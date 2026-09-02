@@ -21,7 +21,7 @@ contract ReinvestmentControllerHandler is CommonBase, StdCheats, StdUtils, Gatew
   MockGatewayWallet internal immutable WALLET;
   MockUSDC internal immutable USDC;
   address internal immutable ADMIN;
-  address internal immutable INVESTOR;
+  address internal immutable KEEPER;
   address internal immutable PAUSER;
 
   uint256 public investCalls;
@@ -37,7 +37,7 @@ contract ReinvestmentControllerHandler is CommonBase, StdCheats, StdUtils, Gatew
     MockGatewayWallet wallet,
     MockUSDC usdc,
     address admin,
-    address investor,
+    address keeper,
     address pauser
   ) {
     CONTROLLER = controller;
@@ -45,7 +45,7 @@ contract ReinvestmentControllerHandler is CommonBase, StdCheats, StdUtils, Gatew
     WALLET = wallet;
     USDC = usdc;
     ADMIN = admin;
-    INVESTOR = investor;
+    KEEPER = keeper;
     PAUSER = pauser;
 
     _setPayloadContext(
@@ -64,8 +64,8 @@ contract ReinvestmentControllerHandler is CommonBase, StdCheats, StdUtils, Gatew
 
     amount = bound(amount, 1, investable);
 
-    vm.warp(block.timestamp + CONTROLLER.depositTimelock() + 1);
-    vm.prank(INVESTOR);
+    vm.warp(block.timestamp + CONTROLLER.investMinDelay() + 1);
+    vm.prank(KEEPER);
     CONTROLLER.invest(amount);
 
     investCalls++;
@@ -83,7 +83,7 @@ contract ReinvestmentControllerHandler is CommonBase, StdCheats, StdUtils, Gatew
 
     amount = bound(amount, 1, divestable);
 
-    vm.prank(INVESTOR);
+    vm.prank(KEEPER);
     CONTROLLER.divest(amount, _encodeAttestation(_defaultTransferSpec(amount)), 'signature');
 
     divestCalls++;
@@ -143,9 +143,9 @@ contract ReinvestmentControllerHandler is CommonBase, StdCheats, StdUtils, Gatew
     CONTROLLER.setMaxInvestBps(bound(maxInvestBps, 1, PERCENTAGE_FACTOR - 1));
   }
 
-  function setDepositTimelock(uint256 depositTimelock) external {
+  function setInvestMinDelay(uint256 investMinDelay) external {
     vm.prank(ADMIN);
-    CONTROLLER.setDepositTimelock(bound(depositTimelock, 1, 30 days));
+    CONTROLLER.setInvestMinDelay(bound(investMinDelay, 1, 30 days));
   }
 
   function supplyToHub(uint256 amount) external {

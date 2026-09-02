@@ -43,7 +43,7 @@ contract ReinvestmentControllerInitiateWithdrawalTest is ReinvestmentControllerT
     vm.prank(admin);
     controller.unpause();
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(burned, _encodeAttestation(_defaultTransferSpec(burned)), hex'1234');
 
     vm.prank(pauser);
@@ -66,7 +66,7 @@ contract ReinvestmentControllerInitiateWithdrawalTest is ReinvestmentControllerT
     vm.prank(admin);
     controller.unpause();
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(100_000e6, _encodeAttestation(_defaultTransferSpec(100_000e6)), hex'1234');
 
     vm.prank(pauser);
@@ -88,17 +88,17 @@ contract ReinvestmentControllerInitiateWithdrawalTest is ReinvestmentControllerT
     controller.unpause();
   }
 
-  function test_initiateWithdrawal_revertsWith_AccessControlUnauthorizedAccount_investor() public {
+  function test_initiateWithdrawal_revertsWith_AccessControlUnauthorizedAccount_keeper() public {
     bytes32 adminRole = controller.DEFAULT_ADMIN_ROLE();
 
     vm.expectRevert(
       abi.encodeWithSelector(
         IAccessControl.AccessControlUnauthorizedAccount.selector,
-        investor,
+        keeper,
         adminRole
       )
     );
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.initiateWithdrawal();
   }
 
@@ -138,7 +138,7 @@ contract ReinvestmentControllerInitiateWithdrawalTest is ReinvestmentControllerT
     vm.prank(admin);
     controller.unpause();
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(INVESTED, _encodeAttestation(_defaultTransferSpec(INVESTED)), hex'1234');
 
     vm.prank(pauser);

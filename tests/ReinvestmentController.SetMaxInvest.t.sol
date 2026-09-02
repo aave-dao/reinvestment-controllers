@@ -35,13 +35,13 @@ contract ReinvestmentControllerSetMaxInvestTest is ReinvestmentControllerTestBas
   }
 
   function test_setMaxInvest_stillAllowsDivest() public {
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.invest(100_000e6);
 
     vm.prank(admin);
     controller.setMaxInvest(0);
 
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.divest(100_000e6, _encodeAttestation(_defaultTransferSpec(100_000e6)), hex'1234');
 
     assertEq(controller.getInvestedAmount(), 0);
@@ -54,11 +54,11 @@ contract ReinvestmentControllerSetMaxInvestTest is ReinvestmentControllerTestBas
     vm.expectRevert(
       abi.encodeWithSelector(
         IAccessControl.AccessControlUnauthorizedAccount.selector,
-        investor,
+        keeper,
         adminRole
       )
     );
-    vm.prank(investor);
+    vm.prank(keeper);
     controller.setMaxInvest(1_000e6);
   }
 }

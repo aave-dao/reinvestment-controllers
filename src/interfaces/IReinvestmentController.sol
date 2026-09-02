@@ -15,9 +15,6 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// @dev Withdrawals are only allowed on the same network as invested
   error CrossChainTransferNotAllowed();
 
-  /// @dev Deposits under timelock
-  error DepositTimelock();
-
   /// @dev Provided hash does not match the calculated hash
   error HashMismatch();
 
@@ -42,7 +39,7 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// @dev Invalid recipient provided in transfer specification
   error InvalidRecipient();
 
-  /// @dev Signer does not have INVESTOR_ROLE to sign transaction
+  /// @dev Signer does not have KEEPER_ROLE to sign transaction
   error InvalidSignature();
 
   /// @dev Invalid signer provided in transfer specification
@@ -56,6 +53,9 @@ interface IReinvestmentController is IERC1271, IAccessControl {
 
   /// @dev Provided address cannot be the zero-address
   error InvalidZeroAddress();
+
+  /// @dev Minimum delay between invests has not elapsed
+  error InvestMinDelayNotElapsed();
 
   /// @dev Fee in the burn intent exceeds the maximum allowed fee
   error MaxFeeExceeded();
@@ -78,10 +78,10 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// @param fee The fee pre-paid by the caller to keep the Hub's swept accounting exact
   event Divested(uint256 amount, uint256 fee);
 
-  /// @dev Emitted when the deposit timelock is updated
-  /// @param oldDepositTimelock The old deposit timelock
-  /// @param depositTimelock The new deposit timelock
-  event SetDepositTimelock(uint256 oldDepositTimelock, uint256 depositTimelock);
+  /// @dev Emitted when the minimum delay between invests is updated
+  /// @param oldInvestMinDelay The old minimum delay
+  /// @param investMinDelay The new minimum delay
+  event SetInvestMinDelay(uint256 oldInvestMinDelay, uint256 investMinDelay);
 
   /// @dev Emitted when the maximum allowed burn intent fee is updated
   /// @param oldMaxFee The old maximum fee
@@ -116,15 +116,15 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// and the protocol addresses (GATEWAY_WALLET, GATEWAY_MINTER, HUB, USDC, ASSET_ID) are
   /// fixed there rather than
   /// here, so changing one requires deploying a new implementation and upgrading to it.
-  /// @param admin The address granted both DEFAULT_ADMIN_ROLE and INVESTOR_ROLE
-  /// @param depositTimelock_ The initial deposit timelock (in seconds)
+  /// @param admin The address granted both DEFAULT_ADMIN_ROLE and KEEPER_ROLE
+  /// @param investMinDelay_ The initial minimum delay between invests (in seconds)
   /// @param maxInvest_ The initial maximum investable amount (in absolute terms)
   /// @param maxInvestBps_ The initial maximum investable amount (in BPS)
   /// @param maxFee_ The initial maximum fee payable on a withdrawal (in absolute terms)
   /// @param bufferBps_ The initial minimum uninvested buffer (in BPS)
   function initialize(
     address admin,
-    uint256 depositTimelock_,
+    uint256 investMinDelay_,
     uint256 maxInvest_,
     uint256 maxInvestBps_,
     uint256 maxFee_,
@@ -177,9 +177,9 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// Gateway's available balance and can no longer back a burn until {withdraw} completes
   function unpause() external;
 
-  /// @notice Sets a new deposit timelock (in seconds)
-  /// @param depositTimelock_ The new deposit timelock amount (in seconds)
-  function setDepositTimelock(uint256 depositTimelock_) external;
+  /// @notice Sets a new minimum delay between invests (in seconds)
+  /// @param investMinDelay_ The new minimum delay between invests (in seconds)
+  function setInvestMinDelay(uint256 investMinDelay_) external;
 
   /// @dev Sets the minimum amount of buffer that must be left on the Hub uninvested (in BPS)
   /// @param buffer New buffer amount (in BPS)
@@ -204,9 +204,9 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// @dev maxBps New maximum amount (in BPS)
   function setMaxInvestBps(uint256 maxBps) external;
 
-  /// @notice Returns the identifier of the INVESTOR Role
-  /// @return The bytes32 id hash of the INVESTOR_ROLE
-  function INVESTOR_ROLE() external view returns (bytes32);
+  /// @notice Returns the identifier of the KEEPER Role
+  /// @return The bytes32 id hash of the KEEPER_ROLE
+  function KEEPER_ROLE() external view returns (bytes32);
 
   /// @notice Returns the identifier of the PAUSER Role
   /// @return The bytes32 id hash of the PAUSER_ROLE
@@ -253,7 +253,7 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// @dev Called by the Gateway to confirm this contract authorized a withdrawal, as the
   /// contract is the depositor, recipient and signer of every burn intent it submits.
   /// The burn intent is re-hashed against the Gateway's domain separator and must match
-  /// `hash`, the recovered signer must hold INVESTOR_ROLE, and the intent itself must pass
+  /// `hash`, the recovered signer must hold KEEPER_ROLE, and the intent itself must pass
   /// the same-chain, token, counterparty and balance checks applied on submission.
   /// Reverts on any failure rather than returning a non-magic selector, so a call that
   /// returns at all returns `IERC1271.isValidSignature.selector`.
@@ -264,9 +264,9 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// @return `IERC1271.isValidSignature.selector` when the signature is valid
   function isValidSignature(bytes32 hash, bytes calldata signature) external view returns (bytes4);
 
-  /// @notice Returns the deposit timelock
-  /// @return The timelock (in seconds)
-  function depositTimelock() external view returns (uint256);
+  /// @notice Returns the minimum delay between invests
+  /// @return The minimum delay (in seconds)
+  function investMinDelay() external view returns (uint256);
 
   /// @notice Returns the maximum fee payable to the Gateway operator on a withdrawal
   /// @dev Compared against the `maxFee` field of a burn intent, which bounds what the operator

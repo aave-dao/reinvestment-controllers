@@ -4,127 +4,133 @@ pragma solidity 0.8.29;
 import {IERC20} from '@openzeppelin/contracts/interfaces/IERC20.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 
-import {IGatewayWallet} from '../../src/interfaces/IGatewayWallet.sol';
-import {MockERC20} from './MockERC20.sol';
-
-/// @dev Stand-in for Circle's `GatewayWallet`. Custodies deposited tokens and mirrors the
-/// real two-bucket balance model: `availableBalance` moves into `withdrawingBalance` on
-/// `initiateWithdrawal`, and `withdraw` pays the latter out.
-///
-/// Getter names and argument order match the real contract (`token`, `depositor`) so the
-/// mock cannot teach a wrong API. One deliberate omission: no `gatewayBurn`. On the real
-/// system Circle burns the wallet balance out-of-band after attesting a burn intent, and
-/// the controller never triggers it. Use {simulateGatewayBurn} to model that step.
-contract MockGatewayWallet is IGatewayWallet {
+/// @dev Stand-in for Circle's `GatewayWallet`. Mirrors the real two-bucket balance model:
+/// `availableBalance` moves into `withdrawingBalance` on `initiateWithdrawal`, and `withdraw`
+/// pays the latter out. Getter names and argument order match the real contract
+/// (`token`, `depositor`) so the mock cannot teach a wrong API.
+contract MockGatewayWallet {
   using SafeERC20 for IERC20;
 
-  /// @dev Mirrors the real wallet's revert when `withdraw` runs before the delay elapses
+  error NoWithdrawingBalance();
+  error NotGatewayMinter();
   error WithdrawalNotYetAvailable();
+  error WithdrawalValueExceedsAvailableBalance();
+  error WithdrawalValueMustBePositive();
 
-  /// @dev Stands in for the real wallet's `feeRecipient` role
-  address public constant FEE_RECIPIENT = address(0xFEE);
-
-  mapping(address token => mapping(address depositor => uint256 amount)) private _availableBalances;
-
-  mapping(address token => mapping(address depositor => uint256 amount))
-    private _withdrawingBalances;
-
-  mapping(address token => mapping(address depositor => uint256 blockNumber))
-    private _withdrawableAtBlocks;
-
-  uint256 private _withdrawalDelay = 50_400;
-
-  bytes32 private _domainSeparator;
-
-  constructor() {
-    _domainSeparator = keccak256(
-      abi.encode(
-        keccak256('EIP712Domain(string name,uint256 chainId)'),
-        keccak256('MockGatewayWallet'),
-        block.chainid
-      )
-    );
-  }
-
-  /// @dev Overrides the EIP-712 domain separator so ERC-1271 tests can build a digest
-  /// that matches whatever they signed
-  function setDomainSeparator(bytes32 domainSeparator_) external {
-    _domainSeparator = domainSeparator_;
-  }
-
-  /// @dev Models Circle burning an attested balance out-of-band, which the controller has
-  /// no way to trigger itself. Debits `value + fee`, sends the fee to `FEE_RECIPIENT` and
-  /// burns the rest, mirroring `Burns._processIntentsAndBurn`. Total supply therefore stays
-  /// conserved against the minter's corresponding mint of `value`.
-  function simulateGatewayBurn(
-    address token,
-    address depositor,
+  event WithdrawalInitiated(
+    address indexed token,
+    address indexed depositor,
     uint256 value,
-    uint256 fee
-  ) external {
-    _availableBalances[token][depositor] -= (value + fee);
+    uint256 remainingAvailable,
+    uint256 totalWithdrawing,
+    uint256 withdrawalBlock
+  );
+  event WithdrawalCompleted(address indexed token, address indexed depositor, uint256 value);
 
-    if (fee > 0) {
-      IERC20(token).safeTransfer(FEE_RECIPIENT, fee);
-    }
+  bytes32 public constant EIP712_DOMAIN_TYPEHASH =
+    keccak256('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)');
 
-    MockERC20(token).burn(address(this), value);
+  uint256 public immutable WITHDRAWAL_DELAY;
+
+  address public gatewayMinter;
+
+  mapping(address token => mapping(address depositor => uint256)) internal _availableBalances;
+  mapping(address token => mapping(address depositor => uint256)) internal _withdrawingBalances;
+  mapping(address token => mapping(address depositor => uint256)) internal _withdrawalBlocks;
+
+  constructor(uint256 withdrawalDelay_) {
+    WITHDRAWAL_DELAY = withdrawalDelay_;
   }
 
-  /// @inheritdoc IGatewayWallet
   function deposit(address token, uint256 value) external {
     IERC20(token).safeTransferFrom(msg.sender, address(this), value);
     _availableBalances[token][msg.sender] += value;
   }
 
-  /// @inheritdoc IGatewayWallet
+  function depositFor(address token, address depositor, uint256 value) external {
+    IERC20(token).safeTransferFrom(msg.sender, address(this), value);
+    _availableBalances[token][depositor] += value;
+  }
+
   function initiateWithdrawal(address token, uint256 value) external {
+    require(value > 0, WithdrawalValueMustBePositive());
+    require(
+      value <= _availableBalances[token][msg.sender],
+      WithdrawalValueExceedsAvailableBalance()
+    );
+
     _availableBalances[token][msg.sender] -= value;
     _withdrawingBalances[token][msg.sender] += value;
-    _withdrawableAtBlocks[token][msg.sender] = block.number + _withdrawalDelay;
+    _withdrawalBlocks[token][msg.sender] = block.number + WITHDRAWAL_DELAY;
+
+    emit WithdrawalInitiated(
+      token,
+      msg.sender,
+      value,
+      _availableBalances[token][msg.sender],
+      _withdrawingBalances[token][msg.sender],
+      _withdrawalBlocks[token][msg.sender]
+    );
   }
 
-  /// @inheritdoc IGatewayWallet
   function withdraw(address token) external {
-    require(_withdrawableAtBlocks[token][msg.sender] <= block.number, WithdrawalNotYetAvailable());
+    require(_withdrawalBlocks[token][msg.sender] <= block.number, WithdrawalNotYetAvailable());
 
-    uint256 amount = _withdrawingBalances[token][msg.sender];
+    uint256 value = _withdrawingBalances[token][msg.sender];
+    require(value > 0, NoWithdrawingBalance());
+
     _withdrawingBalances[token][msg.sender] = 0;
-    _withdrawableAtBlocks[token][msg.sender] = 0;
+    _withdrawalBlocks[token][msg.sender] = 0;
 
-    IERC20(token).safeTransfer(msg.sender, amount);
+    IERC20(token).safeTransfer(msg.sender, value);
+
+    emit WithdrawalCompleted(token, msg.sender, value);
+  }
+  /// @dev Transfers to the minter rather than burning. The real system burns here and mints on
+  /// the destination domain, but the controller only permits same-domain transfers, so moving
+  /// the tokens is equivalent and keeps total supply conserved for the invariant suite.
+  function gatewayBurn(address token, address depositor, uint256 value) external {
+    require(msg.sender == gatewayMinter, NotGatewayMinter());
+
+    _availableBalances[token][depositor] -= value;
+
+    IERC20(token).safeTransfer(msg.sender, value);
   }
 
-  /// @inheritdoc IGatewayWallet
   function domainSeparator() external view returns (bytes32) {
-    return _domainSeparator;
+    return
+      keccak256(
+        abi.encode(
+          EIP712_DOMAIN_TYPEHASH,
+          keccak256('GatewayWallet'),
+          keccak256('1'),
+          block.chainid,
+          address(this)
+        )
+      );
   }
 
-  /// @inheritdoc IGatewayWallet
   function availableBalance(address token, address depositor) external view returns (uint256) {
     return _availableBalances[token][depositor];
   }
 
-  /// @inheritdoc IGatewayWallet
   function withdrawingBalance(address token, address depositor) external view returns (uint256) {
     return _withdrawingBalances[token][depositor];
   }
 
-  /// @inheritdoc IGatewayWallet
-  function withdrawalDelay() external view returns (uint256) {
-    return _withdrawalDelay;
-  }
-
-  /// @inheritdoc IGatewayWallet
-  function withdrawalBlock(address token, address depositor) external view returns (uint256) {
-    return _withdrawableAtBlocks[token][depositor];
-  }
-
-  function setWithdrawalDelay(uint256 delay) external {
-    _withdrawalDelay = delay;
-  }
-
   function totalBalance(address token, address depositor) external view returns (uint256) {
     return _availableBalances[token][depositor] + _withdrawingBalances[token][depositor];
+  }
+
+  function withdrawalDelay() external view returns (uint256) {
+    return WITHDRAWAL_DELAY;
+  }
+
+  function withdrawalBlock(address token, address depositor) external view returns (uint256) {
+    return _withdrawalBlocks[token][depositor];
+  }
+
+  function setGatewayMinter(address minter) external {
+    gatewayMinter = minter;
   }
 }

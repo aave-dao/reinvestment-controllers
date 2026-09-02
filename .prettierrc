@@ -20,6 +20,12 @@
         "singleQuote": true,
         "bracketSpacing": false
       }
+    },
+    {
+      "files": "*.md",
+      "options": {
+        "embeddedLanguageFormatting": "off"
+      }
     }
   ]
 }

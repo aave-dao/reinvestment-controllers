@@ -1,29 +1,51 @@
 // SPDX-License-Identifier: LicenseRef-BUSL
 pragma solidity 0.8.29;
 
-import {IGatewayMinter} from '../../src/interfaces/IGatewayMinter.sol';
-import {MockERC20} from './MockERC20.sol';
+import {IERC20} from '@openzeppelin/contracts/interfaces/IERC20.sol';
+import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
+import {AttestationLib} from '@circle-gateway/src/lib/AttestationLib.sol';
+import {TransferSpecLib} from '@circle-gateway/src/lib/TransferSpecLib.sol';
+import {AddressLib} from '@circle-gateway/src/lib/AddressLib.sol';
+import {Cursor} from '@circle-gateway/src/lib/Cursor.sol';
 
-/// @dev Stand-in for Circle's `GatewayMinter`, a separate deployment from the wallet.
-///
-/// Performs no attestation or signature verification — the payload is ignored and
-/// {setNextMint} decides what the next call delivers. The controller validates the
-/// attestation itself before calling, so payload parsing belongs in those tests.
-///
-/// Mints new tokens rather than transferring held ones, matching the real minter's mint
-/// authority. It holds no balance of its own.
-contract MockGatewayMinter is IGatewayMinter {
-  address private _nextMintToken;
-  uint256 private _nextMintValue;
+import {MockGatewayWallet} from './MockGatewayWallet.sol';
 
-  /// @dev Configures what the next `gatewayMint` delivers to its caller
-  function setNextMint(address token, uint256 value) external {
-    _nextMintToken = token;
-    _nextMintValue = value;
+contract MockGatewayMinter {
+  using SafeERC20 for IERC20;
+  using TransferSpecLib for bytes29;
+
+  error InvalidAttestationSigner();
+  error MustHaveAtLeastOneAttestation();
+
+  event Minted(address indexed token, address indexed recipient, uint256 value);
+
+  MockGatewayWallet public immutable GATEWAY_WALLET;
+
+  constructor(address gatewayWallet) {
+    GATEWAY_WALLET = MockGatewayWallet(gatewayWallet);
   }
 
-  /// @inheritdoc IGatewayMinter
-  function gatewayMint(bytes memory, bytes memory) external {
-    MockERC20(_nextMintToken).mint(msg.sender, _nextMintValue);
+  /// @dev Pays the recipient with the tokens `gatewayBurn` just released rather than minting new
+  /// ones, so the mock cannot create supply the wallet never held. Signature checking is reduced to
+  /// a non-empty length; the controller validates the attestation itself before calling.
+  function gatewayMint(bytes memory attestationPayload, bytes memory signature) external {
+    require(signature.length > 0, InvalidAttestationSigner());
+
+    Cursor memory cursor = AttestationLib.cursor(attestationPayload);
+    require(cursor.numElements > 0, MustHaveAtLeastOneAttestation());
+
+    while (!cursor.done) {
+      bytes29 spec = AttestationLib.getTransferSpec(AttestationLib.next(cursor));
+
+      address token = AddressLib._bytes32ToAddress(spec.getSourceToken());
+      address depositor = AddressLib._bytes32ToAddress(spec.getSourceDepositor());
+      address recipient = AddressLib._bytes32ToAddress(spec.getDestinationRecipient());
+      uint256 value = spec.getValue();
+
+      GATEWAY_WALLET.gatewayBurn(token, depositor, value);
+      IERC20(token).safeTransfer(recipient, value);
+
+      emit Minted(token, recipient, value);
+    }
   }
 }

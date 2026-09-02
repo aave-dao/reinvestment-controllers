@@ -4,92 +4,97 @@ pragma solidity 0.8.29;
 import {IERC20} from '@openzeppelin/contracts/interfaces/IERC20.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 
-import {IHub} from 'aave-v4/hub/interfaces/IHub.sol';
+import {MockUSDC} from './MockUSDC.sol';
 
-/// @dev Stand-in for the Hub. Tracks the three balances `_getInvestableAmount` reads
-/// (added / liquidity / swept) and moves real tokens on `sweep`, so the controller's
-/// custody path can be exercised end to end.
 contract MockHub {
   using SafeERC20 for IERC20;
 
-  /// @dev Asset not listed
   error AssetNotListed();
+  error InsufficientLiquidity(uint256 liquidity);
+  error NotReinvestmentController();
+  error SweptExceeded(uint256 swept);
 
-  mapping(uint256 assetId => address underlying) public underlyingOf;
+  event Sweep(uint256 indexed assetId, address indexed reinvestmentController, uint256 amount);
+  event Reclaim(uint256 indexed assetId, address indexed reinvestmentController, uint256 amount);
 
-  mapping(address underlying => uint256 assetId) private _assetIds;
-  mapping(address underlying => bool listed) private _listed;
+  uint256 public constant USDC_ASSET_ID = 3;
 
-  mapping(uint256 assetId => uint256 amount) private _addedAssets;
-  mapping(uint256 assetId => uint256 amount) private _liquidity;
-  mapping(uint256 assetId => uint256 amount) private _swept;
+  MockUSDC public immutable USDC;
 
-  mapping(uint256 assetId => IHub.AssetConfig config) private _configs;
+  address public reinvestmentController;
 
-  /// @dev Registers `underlying` under `assetId`. Must be called before deploying the
-  /// controller, whose constructor reads `getAssetId`.
-  function listAsset(address underlying, uint256 assetId) external {
-    _assetIds[underlying] = assetId;
-    _listed[underlying] = true;
-    underlyingOf[assetId] = underlying;
-  }
+  uint256 internal _liquidity;
+  uint256 internal _swept;
+  uint256 internal _addedAssets;
 
-  /// @dev Sets total assets supplied to the Hub, the base for buffer and BPS caps
-  function setAddedAssets(uint256 assetId, uint256 amount) external {
-    _addedAssets[assetId] = amount;
-  }
-
-  /// @dev Sets idle (uninvested) liquidity held by the Hub
-  function setLiquidity(uint256 assetId, uint256 amount) external {
-    _liquidity[assetId] = amount;
-  }
-
-  /// @dev Sets the amount already swept out to the controller
-  function setSwept(uint256 assetId, uint256 amount) external {
-    _swept[assetId] = amount;
+  constructor(address usdc) {
+    USDC = MockUSDC(usdc);
   }
 
   function sweep(uint256 assetId, uint256 amount) external {
-    _liquidity[assetId] -= amount;
-    _swept[assetId] += amount;
+    _checkAsset(assetId);
+    require(msg.sender == reinvestmentController, NotReinvestmentController());
+    require(amount <= _liquidity, InsufficientLiquidity(_liquidity));
 
-    IERC20(underlyingOf[assetId]).safeTransfer(msg.sender, amount);
+    _liquidity -= amount;
+    _swept += amount;
+
+    IERC20(address(USDC)).safeTransfer(msg.sender, amount);
+
+    emit Sweep(assetId, msg.sender, amount);
   }
 
-  /// @dev Accounting only. The controller pushes the tokens back with `safeTransfer`
-  /// immediately before calling this, so the mock must not pull them again.
+  /// @dev Accounting only. The controller pushes the tokens back with `safeTransfer` immediately
+  /// before calling this, so the mock must not pull them again. The real Hub behaves the same way,
+  /// checking its own balance rather than transferring.
   function reclaim(uint256 assetId, uint256 amount) external {
-    _swept[assetId] -= amount;
-    _liquidity[assetId] += amount;
-  }
+    _checkAsset(assetId);
+    require(msg.sender == reinvestmentController, NotReinvestmentController());
+    require(amount <= _swept, SweptExceeded(_swept));
 
-  function getAssetConfig(uint256 assetId) external view returns (IHub.AssetConfig memory) {
-    return _configs[assetId];
-  }
+    _swept -= amount;
+    _liquidity += amount;
 
-  /// @dev Unrestricted here; the real Hub gates this behind its access manager
-  function updateAssetConfig(
-    uint256 assetId,
-    IHub.AssetConfig calldata config,
-    bytes calldata
-  ) external {
-    _configs[assetId] = config;
-  }
-
-  function getAddedAssets(uint256 assetId) external view returns (uint256) {
-    return _addedAssets[assetId];
+    emit Reclaim(assetId, msg.sender, amount);
   }
 
   function getAssetId(address underlying) external view returns (uint256) {
-    require(_listed[underlying], AssetNotListed());
-    return _assetIds[underlying];
+    require(underlying == address(USDC), AssetNotListed());
+    return USDC_ASSET_ID;
   }
 
   function getAssetLiquidity(uint256 assetId) external view returns (uint256) {
-    return _liquidity[assetId];
+    _checkAsset(assetId);
+    return _liquidity;
   }
 
   function getAssetSwept(uint256 assetId) external view returns (uint256) {
-    return _swept[assetId];
+    _checkAsset(assetId);
+    return _swept;
+  }
+
+  function getAddedAssets(uint256 assetId) external view returns (uint256) {
+    _checkAsset(assetId);
+    return _addedAssets;
+  }
+
+  function setReinvestmentController(address controller) external {
+    reinvestmentController = controller;
+  }
+
+  function add(uint256 amount) external {
+    USDC.mint(address(this), amount);
+    _liquidity += amount;
+    _addedAssets += amount;
+  }
+
+  function setAccounting(uint256 addedAssets_, uint256 liquidity_, uint256 swept_) external {
+    _addedAssets = addedAssets_;
+    _liquidity = liquidity_;
+    _swept = swept_;
+  }
+
+  function _checkAsset(uint256 assetId) internal pure {
+    require(assetId == USDC_ASSET_ID, AssetNotListed());
   }
 }

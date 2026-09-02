@@ -1,216 +1,139 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: LicenseRef-BUSL
 pragma solidity 0.8.29;
 
 import {IAccessControl} from '@openzeppelin/contracts/access/IAccessControl.sol';
-import {PausableUpgradeable} from '@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol';
 
-import {IReinvestmentController} from '../src/ReinvestmentController.sol';
-import {MockGatewayWallet} from './mocks/MockGatewayWallet.sol';
+import {IReinvestmentController} from '../src/interfaces/IReinvestmentController.sol';
+
 import {ReinvestmentControllerTestBase} from './ReinvestmentController.Base.t.sol';
 
-uint256 constant GATEWAY_WITHDRAWAL_DELAY = 50_400;
+contract ReinvestmentControllerWithdrawTest is ReinvestmentControllerTestBase {
+  uint256 internal constant INVESTED = 400_000e6;
 
-contract ReinvestmentControllerInitiateWithdrawalTest is ReinvestmentControllerTestBase {
-  function test_initiateWithdrawal_revertsWith_AccessControlUnauthorizedAccount() public {
-    _invest(INVESTABLE);
+  function setUp() public override {
+    super.setUp();
+
+    _invest(INVESTED);
     _pause();
-
-    vm.expectRevert(
-      abi.encodeWithSelector(
-        IAccessControl.AccessControlUnauthorizedAccount.selector,
-        address(this),
-        controller.DEFAULT_ADMIN_ROLE()
-      )
-    );
-    controller.initiateWithdrawal();
   }
 
-  function test_initiateWithdrawal_revertsWith_ExpectedPause() public {
-    _invest(INVESTABLE);
-
-    vm.prank(admin);
-    vm.expectRevert(PausableUpgradeable.ExpectedPause.selector);
-    controller.initiateWithdrawal();
-  }
-
-  function test_initiateWithdrawal_revertsWith_InvalidAmount() public {
-    _pause();
-
-    vm.prank(admin);
-    vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
-    controller.initiateWithdrawal();
-  }
-
-  function test_initiateWithdrawal_revertsWith_InsufficientLiquidity() public {
-    _invest(INVESTABLE);
-    hub.setSwept(ASSET_ID, INVESTABLE - 1);
-    _pause();
-
-    vm.prank(admin);
-    vm.expectRevert(IReinvestmentController.InsufficientLiquidity.selector);
-    controller.initiateWithdrawal();
-  }
-
-  function test_initiateWithdrawal_revertsWith_WithdrawalInProcess() public {
-    _invest(INVESTABLE);
-    _pause();
-
+  function test_withdraw() public {
     vm.prank(admin);
     controller.initiateWithdrawal();
 
-    vm.prank(admin);
-    vm.expectRevert(IReinvestmentController.WithdrawalInProcess.selector);
-    controller.initiateWithdrawal();
-  }
-
-  function test_initiateWithdrawal() public {
-    _invest(INVESTABLE);
-    _pause();
-
-    uint256 expectedWithdrawalBlock = block.number + GATEWAY_WITHDRAWAL_DELAY;
+    vm.roll(block.number + WITHDRAWAL_DELAY);
 
     vm.expectEmit(address(controller));
-    emit IReinvestmentController.WithdrawalInitiated(INVESTABLE);
+    emit IReinvestmentController.WithdrawalCompleted(INVESTED);
+
+    vm.prank(admin);
+    controller.withdraw();
+
+    assertEq(hub.getAssetSwept(assetId), 0);
+    assertEq(hub.getAssetLiquidity(assetId), SUPPLIED);
+    assertEq(usdc.balanceOf(address(hub)), SUPPLIED);
+    assertEq(usdc.balanceOf(address(controller)), 0);
+    assertEq(usdc.balanceOf(address(wallet)), 0);
+    assertEq(wallet.withdrawingBalance(address(usdc), address(controller)), 0);
+    assertEq(wallet.availableBalance(address(usdc), address(controller)), 0);
+    assertEq(wallet.withdrawalBlock(address(usdc), address(controller)), 0);
+    assertEq(controller.getInvestedAmount(), 0);
+    assertTrue(controller.paused());
+  }
+
+  function test_withdraw(uint256 blocksAhead) public {
+    blocksAhead = bound(blocksAhead, 0, 1_000);
 
     vm.prank(admin);
     controller.initiateWithdrawal();
 
-    assertEq(
-      gatewayWallet.withdrawalBlock(address(usdc), address(controller)),
-      expectedWithdrawalBlock
-    );
+    vm.roll(block.number + WITHDRAWAL_DELAY + blocksAhead);
 
-    assertEq(gatewayWallet.withdrawingBalance(address(usdc), address(controller)), INVESTABLE);
-    assertEq(gatewayWallet.availableBalance(address(usdc), address(controller)), 0);
+    vm.prank(admin);
+    controller.withdraw();
 
-    assertEq(usdc.balanceOf(address(gatewayWallet)), INVESTABLE);
-    assertEq(controller.getInvestedAmount(), INVESTABLE);
+    assertEq(hub.getAssetSwept(assetId), 0);
+    assertEq(hub.getAssetLiquidity(assetId), SUPPLIED);
+    assertEq(wallet.withdrawingBalance(address(usdc), address(controller)), 0);
   }
-}
 
-contract ReinvestmentControllerWithdrawTest is ReinvestmentControllerTestBase {
+  function test_withdraw_afterPartialDivest() public {
+    vm.prank(admin);
+    controller.unpause();
+
+    vm.prank(investor);
+    controller.divest(100_000e6, _encodeAttestation(_defaultTransferSpec(100_000e6)), hex'1234');
+
+    vm.prank(pauser);
+    controller.pause();
+
+    vm.prank(admin);
+    controller.initiateWithdrawal();
+
+    vm.roll(block.number + WITHDRAWAL_DELAY);
+
+    vm.expectEmit(address(controller));
+    emit IReinvestmentController.WithdrawalCompleted(INVESTED - 100_000e6);
+
+    vm.prank(admin);
+    controller.withdraw();
+
+    assertEq(hub.getAssetSwept(assetId), 0);
+    assertEq(hub.getAssetLiquidity(assetId), SUPPLIED);
+  }
+
+  function test_withdraw_unblocksUnpause() public {
+    vm.prank(admin);
+    controller.initiateWithdrawal();
+
+    vm.roll(block.number + WITHDRAWAL_DELAY);
+
+    vm.prank(admin);
+    controller.withdraw();
+
+    vm.prank(admin);
+    controller.unpause();
+
+    assertFalse(controller.paused());
+    assertEq(controller.pausedAt(), 0);
+  }
+
   function test_withdraw_revertsWith_AccessControlUnauthorizedAccount() public {
-    _invest(INVESTABLE);
-    _pause();
-    _initiateWithdrawal();
+    bytes32 adminRole = controller.DEFAULT_ADMIN_ROLE();
 
-    vm.roll(_withdrawalBlock());
+    vm.prank(admin);
+    controller.initiateWithdrawal();
+
+    vm.roll(block.number + WITHDRAWAL_DELAY);
 
     vm.expectRevert(
       abi.encodeWithSelector(
         IAccessControl.AccessControlUnauthorizedAccount.selector,
-        address(this),
-        controller.DEFAULT_ADMIN_ROLE()
+        investor,
+        adminRole
       )
     );
+    vm.prank(investor);
     controller.withdraw();
   }
 
   function test_withdraw_revertsWith_NoWithdrawalInProcess() public {
-    _invest(INVESTABLE);
-
-    vm.prank(admin);
     vm.expectRevert(IReinvestmentController.NoWithdrawalInProcess.selector);
-    controller.withdraw();
-  }
-
-  function test_withdraw_revertsWith_WithdrawalNotYetAvailable() public {
-    _invest(INVESTABLE);
-    _pause();
-    _initiateWithdrawal();
-
-    vm.roll(_withdrawalBlock() - 1);
-
-    vm.prank(admin);
-    vm.expectRevert(MockGatewayWallet.WithdrawalNotYetAvailable.selector);
-    controller.withdraw();
-  }
-
-  function test_withdraw_atExactReadyBlock() public {
-    _invest(INVESTABLE);
-    _pause();
-    _initiateWithdrawal();
-
-    vm.roll(_withdrawalBlock());
-
     vm.prank(admin);
     controller.withdraw();
-
-    assertEq(gatewayWallet.withdrawingBalance(address(usdc), address(controller)), 0);
   }
 
-  function test_withdraw_whileStillPaused() public {
-    _invest(INVESTABLE);
-    _pause();
-    _initiateWithdrawal();
-
-    vm.roll(_withdrawalBlock());
-
-    vm.prank(admin);
-    controller.withdraw();
-
-    assertTrue(controller.paused());
-    assertEq(controller.getInvestedAmount(), 0);
-  }
-
-  function test_withdraw() public {
-    _invest(INVESTABLE);
-    _pause();
-    _initiateWithdrawal();
-
-    vm.roll(_withdrawalBlock() + 1);
-
-    vm.expectEmit(address(controller));
-    emit IReinvestmentController.WithdrawalCompleted(INVESTABLE);
-
-    vm.prank(admin);
-    controller.withdraw();
-
-    assertEq(usdc.balanceOf(address(hub)), SUPPLIED);
-    assertEq(usdc.balanceOf(address(gatewayWallet)), 0);
-    assertEq(usdc.balanceOf(address(controller)), 0);
-
-    assertEq(controller.getInvestedAmount(), 0);
-    assertEq(hub.getAssetLiquidity(ASSET_ID), SUPPLIED);
-    assertEq(gatewayWallet.withdrawingBalance(address(usdc), address(controller)), 0);
-  }
-
-  function _withdrawalBlock() internal view returns (uint256) {
-    return gatewayWallet.withdrawalBlock(address(usdc), address(controller));
-  }
-
-  function _initiateWithdrawal() internal {
+  function test_withdraw_revertsWith_NoWithdrawalInProcess_afterWithdrawalCompletes() public {
     vm.prank(admin);
     controller.initiateWithdrawal();
-  }
 
-  function test_withdraw_revertsWith_WithdrawalNotYetAvailable_beforeDelay(
-    uint256 blockNumber
-  ) public {
-    _invest(INVESTABLE);
-    _pause();
-    _initiateWithdrawal();
-
-    blockNumber = bound(blockNumber, block.number, _withdrawalBlock() - 1);
-    vm.roll(blockNumber);
-
-    vm.prank(admin);
-    vm.expectRevert(MockGatewayWallet.WithdrawalNotYetAvailable.selector);
-    controller.withdraw();
-  }
-
-  function test_withdraw_atOrAfterDelay(uint256 blockNumber) public {
-    _invest(INVESTABLE);
-    _pause();
-    _initiateWithdrawal();
-
-    blockNumber = bound(blockNumber, _withdrawalBlock(), _withdrawalBlock() + 1_000_000);
-    vm.roll(blockNumber);
+    vm.roll(block.number + WITHDRAWAL_DELAY);
 
     vm.prank(admin);
     controller.withdraw();
 
-    assertEq(controller.getInvestedAmount(), 0);
-    assertEq(usdc.balanceOf(address(hub)), SUPPLIED);
+    vm.expectRevert(IReinvestmentController.NoWithdrawalInProcess.selector);
+    vm.prank(admin);
+    controller.withdraw();
   }
 }

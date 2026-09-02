@@ -51,7 +51,14 @@ contract ReinvestmentControllerConstructorTest is ReinvestmentControllerTestBase
 
   function test_constructor_revertsWith_InvalidInitialization_onTheImplementation() public {
     vm.expectRevert(Initializable.InvalidInitialization.selector);
-    implementation.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, BUFFER_BPS);
+    implementation.initialize(
+      admin,
+      DEPOSIT_TIMELOCK,
+      MAX_INVEST,
+      MAX_INVEST_BPS,
+      MAX_FEE,
+      BUFFER_BPS
+    );
   }
 
   function test_constructor_revertsWith_InvalidZeroAddress_gatewayWallet() public {

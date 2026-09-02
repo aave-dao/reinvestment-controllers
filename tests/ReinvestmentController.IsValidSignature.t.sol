@@ -12,6 +12,7 @@ import {ReinvestmentControllerTestBase} from './ReinvestmentController.Base.t.so
 
 contract ReinvestmentControllerIsValidSignatureTest is ReinvestmentControllerTestBase {
   uint256 internal constant INVESTED = 400_000e6;
+  uint256 internal constant FEE = 1e6;
 
   function setUp() public override {
     super.setUp();
@@ -36,6 +37,16 @@ contract ReinvestmentControllerIsValidSignatureTest is ReinvestmentControllerTes
 
   function test_isValidSignature_atFullSweptBalance() public view {
     bytes memory intent = _encodeBurnIntent(_defaultTransferSpec(INVESTED));
+    (bytes32 digest, bytes memory signature) = _signBurnIntent(investorPrivateKey, intent);
+
+    assertEq(controller.isValidSignature(digest, signature), IERC1271.isValidSignature.selector);
+  }
+
+  function test_isValidSignature_withFeeAtTheConfiguredMaximum() public {
+    vm.prank(admin);
+    controller.setMaxFee(FEE);
+
+    bytes memory intent = _encodeBurnIntent(_defaultTransferSpec(1_000e6), FEE);
     (bytes32 digest, bytes memory signature) = _signBurnIntent(investorPrivateKey, intent);
 
     assertEq(controller.isValidSignature(digest, signature), IERC1271.isValidSignature.selector);
@@ -169,6 +180,38 @@ contract ReinvestmentControllerIsValidSignatureTest is ReinvestmentControllerTes
     hub.setAccounting(SUPPLIED, SUPPLIED, 0);
 
     vm.expectRevert(IReinvestmentController.BurnIntentExceedsBalance.selector);
+    controller.isValidSignature(digest, signature);
+  }
+
+  function test_isValidSignature_revertsWith_BurnIntentExceedsBalance_valuePlusFeeAboveSwept()
+    public
+  {
+    vm.prank(admin);
+    controller.setMaxFee(FEE);
+
+    bytes memory intent = _encodeBurnIntent(_defaultTransferSpec(INVESTED), 1);
+    (bytes32 digest, bytes memory signature) = _signBurnIntent(investorPrivateKey, intent);
+
+    vm.expectRevert(IReinvestmentController.BurnIntentExceedsBalance.selector);
+    controller.isValidSignature(digest, signature);
+  }
+
+  function test_isValidSignature_revertsWith_MaxFeeExceeded_defaultMaxFeeIsZero() public {
+    bytes memory intent = _encodeBurnIntent(_defaultTransferSpec(1_000e6), 1);
+    (bytes32 digest, bytes memory signature) = _signBurnIntent(investorPrivateKey, intent);
+
+    vm.expectRevert(IReinvestmentController.MaxFeeExceeded.selector);
+    controller.isValidSignature(digest, signature);
+  }
+
+  function test_isValidSignature_revertsWith_MaxFeeExceeded_aboveConfiguredMaxFee() public {
+    vm.prank(admin);
+    controller.setMaxFee(FEE);
+
+    bytes memory intent = _encodeBurnIntent(_defaultTransferSpec(1_000e6), FEE + 1);
+    (bytes32 digest, bytes memory signature) = _signBurnIntent(investorPrivateKey, intent);
+
+    vm.expectRevert(IReinvestmentController.MaxFeeExceeded.selector);
     controller.isValidSignature(digest, signature);
   }
 

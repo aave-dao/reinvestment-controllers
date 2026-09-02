@@ -63,9 +63,16 @@ abstract contract GatewayPayloads {
   }
 
   function _encodeBurnIntent(TransferSpec memory spec) internal view returns (bytes memory) {
+    return _encodeBurnIntent(spec, 0);
+  }
+
+  function _encodeBurnIntent(
+    TransferSpec memory spec,
+    uint256 maxFee
+  ) internal view returns (bytes memory) {
     return
       BurnIntentLib.encodeBurnIntent(
-        BurnIntent({maxBlockHeight: block.number, maxFee: 0, spec: spec})
+        BurnIntent({maxBlockHeight: block.number, maxFee: maxFee, spec: spec})
       );
   }
 

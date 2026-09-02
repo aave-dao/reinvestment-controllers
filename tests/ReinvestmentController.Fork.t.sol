@@ -6,7 +6,7 @@ import {Test} from 'forge-std/Test.sol';
 import {IAccessControl} from '@openzeppelin/contracts/access/IAccessControl.sol';
 import {IERC20} from '@openzeppelin/contracts/interfaces/IERC20.sol';
 import {IERC1271} from '@openzeppelin/contracts/interfaces/IERC1271.sol';
-import {ERC1967Proxy} from '@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol';
+import {TransparentUpgradeableProxy} from '@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol';
 import {Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
 import {MessageHashUtils} from '@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol';
 import {BurnIntentLib} from '@circle-gateway/src/lib/BurnIntentLib.sol';
@@ -29,17 +29,27 @@ interface IMintsErrors {
 contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
   uint256 internal constant FORK_BLOCK = 25_796_690;
 
-  address internal constant GATEWAY_WALLET = 0x77777777Dcc4d5A8B6E418Fd04D8997ef11000eE;
-  address internal constant GATEWAY_MINTER = 0x2222222d7164433c4C09B0b0D809a9b52C04C205;
-  address internal constant HUB = 0xCca852Bc40e560adC3b1Cc58CA5b55638ce826c9;
-  address internal constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+  // https://etherscan.io/address/0x77777777Dcc4d5A8B6E418Fd04D8997ef11000eE
+  address public constant GATEWAY_WALLET = 0x77777777Dcc4d5A8B6E418Fd04D8997ef11000eE;
+
+  // https://etherscan.io/address/0x2222222d7164433c4C09B0b0D809a9b52C04C205
+  address public constant GATEWAY_MINTER = 0x2222222d7164433c4C09B0b0D809a9b52C04C205;
+
+  // https://etherscan.io/address/0xCca852Bc40e560adC3b1Cc58CA5b55638ce826c9
+  address public constant HUB = 0xCca852Bc40e560adC3b1Cc58CA5b55638ce826c9;
+
+  // https://etherscan.io/address/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
+  address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
 
   uint256 internal constant DEPOSIT_TIMELOCK = 1 days;
   uint256 internal constant MAX_INVEST = 10_000_000e6;
   uint256 internal constant MAX_INVEST_BPS = 8_000;
   uint256 internal constant BUFFER_BPS = 1_000;
+  uint256 internal constant MAX_FEE = 1e6;
+  uint256 internal constant FEE_FUNDING = 1_000e6;
 
   address internal admin = makeAddr('admin');
+  address internal proxyAdminOwner = makeAddr('proxyAdminOwner');
   address internal alice = makeAddr('alice');
 
   address internal investor;
@@ -58,15 +68,20 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
 
     controller = ReinvestmentController(
       address(
-        new ERC1967Proxy(
+        new TransparentUpgradeableProxy(
           address(new ReinvestmentController(GATEWAY_WALLET, GATEWAY_MINTER, HUB, USDC)),
+          proxyAdminOwner,
           abi.encodeCall(
             IReinvestmentController.initialize,
-            (admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, BUFFER_BPS)
+            (admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS)
           )
         )
       )
     );
+
+    deal(USDC, investor, FEE_FUNDING);
+    vm.prank(investor);
+    IERC20(USDC).approve(address(controller), type(uint256).max);
 
     assetId = controller.ASSET_ID();
     _setPayloadContext(GATEWAY_WALLET, GATEWAY_MINTER, USDC, address(controller));
@@ -124,27 +139,29 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
   }
 
   function test_divest() public {
-    uint256 amount = controller.getInvestableAmount();
+    uint256 invested = controller.getInvestableAmount();
     vm.prank(investor);
-    controller.invest(amount);
+    controller.invest(invested);
     uint256 liquidityBefore = IHub(HUB).getAssetLiquidity(assetId);
     uint256 hubBalanceBefore = IERC20(USDC).balanceOf(HUB);
 
+    uint256 amount = invested - MAX_FEE;
     (bytes memory attestation, bytes memory signature) = _attest(amount);
 
     vm.expectEmit(HUB);
-    emit IHub.Reclaim(assetId, address(controller), amount);
+    emit IHub.Reclaim(assetId, address(controller), invested);
     vm.expectEmit(address(controller));
-    emit IReinvestmentController.Divested(amount);
+    emit IReinvestmentController.Divested(amount, MAX_FEE);
 
     vm.prank(investor);
     controller.divest(amount, attestation, signature);
 
-    assertEq(IHub(HUB).getAssetLiquidity(assetId), liquidityBefore + amount);
+    assertEq(IHub(HUB).getAssetLiquidity(assetId), liquidityBefore + invested);
     assertEq(IHub(HUB).getAssetSwept(assetId), 0);
     assertEq(controller.getInvestedAmount(), 0);
-    assertEq(IERC20(USDC).balanceOf(HUB), hubBalanceBefore + amount);
+    assertEq(IERC20(USDC).balanceOf(HUB), hubBalanceBefore + invested);
     assertEq(IERC20(USDC).balanceOf(address(controller)), 0);
+    assertEq(IERC20(USDC).balanceOf(investor), FEE_FUNDING - MAX_FEE);
   }
 
   function test_divest_revertsWith_InsufficientLiquidity() public {
@@ -159,10 +176,11 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
   }
 
   function test_divest_revertsWith_InvalidAttestationSigner() public {
-    uint256 amount = controller.getInvestableAmount();
+    uint256 invested = controller.getInvestableAmount();
     vm.prank(investor);
-    controller.invest(amount);
+    controller.invest(invested);
 
+    uint256 amount = invested - MAX_FEE;
     bytes memory attestation = _encodeAttestation(_defaultTransferSpec(amount));
     (uint8 v, bytes32 r, bytes32 s) = vm.sign(
       investorPrivateKey,

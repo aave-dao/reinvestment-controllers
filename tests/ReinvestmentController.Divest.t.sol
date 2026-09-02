@@ -27,7 +27,7 @@ contract ReinvestmentControllerDivestTest is ReinvestmentControllerTestBase {
     vm.expectEmit(address(hub));
     emit MockHub.Reclaim(assetId, address(controller), amount);
     vm.expectEmit(address(controller));
-    emit IReinvestmentController.Divested(amount);
+    emit IReinvestmentController.Divested(amount, MAX_FEE);
 
     vm.prank(investor);
     controller.divest(amount, attestation, signature);

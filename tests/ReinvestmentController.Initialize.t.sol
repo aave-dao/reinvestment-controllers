@@ -34,13 +34,16 @@ contract ReinvestmentControllerInitializeTest is ReinvestmentControllerTestBase 
     vm.expectEmit(address(fresh));
     emit IReinvestmentController.SetMaxInvestBps(0, MAX_INVEST_BPS);
     vm.expectEmit(address(fresh));
+    emit IReinvestmentController.SetMaxFee(0, MAX_FEE);
+    vm.expectEmit(address(fresh));
     emit IReinvestmentController.SetBufferBps(0, BUFFER_BPS);
 
-    fresh.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, BUFFER_BPS);
+    fresh.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
 
     assertEq(fresh.depositTimelock(), DEPOSIT_TIMELOCK);
     assertEq(fresh.maxInvest(), MAX_INVEST);
     assertEq(fresh.maxInvestBps(), MAX_INVEST_BPS);
+    assertEq(fresh.maxFee(), MAX_FEE);
     assertEq(fresh.bufferBps(), BUFFER_BPS);
     assertEq(fresh.pausedAt(), 0);
     assertFalse(fresh.paused());
@@ -57,6 +60,7 @@ contract ReinvestmentControllerInitializeTest is ReinvestmentControllerTestBase 
     uint256 depositTimelock_,
     uint256 maxInvest_,
     uint256 maxInvestBps_,
+    uint256 maxFee_,
     uint256 bufferBps_
   ) public {
     depositTimelock_ = bound(depositTimelock_, 1, 365 days);
@@ -64,16 +68,17 @@ contract ReinvestmentControllerInitializeTest is ReinvestmentControllerTestBase 
     maxInvestBps_ = bound(maxInvestBps_, 1, PERCENTAGE_FACTOR - 1);
     bufferBps_ = bound(bufferBps_, 1, PERCENTAGE_FACTOR - 1);
 
-    fresh.initialize(admin, depositTimelock_, maxInvest_, maxInvestBps_, bufferBps_);
+    fresh.initialize(admin, depositTimelock_, maxInvest_, maxInvestBps_, maxFee_, bufferBps_);
 
     assertEq(fresh.depositTimelock(), depositTimelock_);
     assertEq(fresh.maxInvest(), maxInvest_);
     assertEq(fresh.maxInvestBps(), maxInvestBps_);
+    assertEq(fresh.maxFee(), maxFee_);
     assertEq(fresh.bufferBps(), bufferBps_);
   }
 
   function test_initialize_grantsEveryRoleToAdminOnly() public {
-    fresh.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, BUFFER_BPS);
+    fresh.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
 
     assertFalse(fresh.hasRole(fresh.DEFAULT_ADMIN_ROLE(), alice));
     assertFalse(fresh.hasRole(fresh.INVESTOR_ROLE(), alice));
@@ -81,7 +86,7 @@ contract ReinvestmentControllerInitializeTest is ReinvestmentControllerTestBase 
   }
 
   function test_initialize_leavesImmutablesUntouched() public {
-    fresh.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, BUFFER_BPS);
+    fresh.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
 
     assertEq(address(fresh.GATEWAY_WALLET()), address(wallet));
     assertEq(address(fresh.GATEWAY_MINTER()), address(minter));
@@ -91,7 +96,7 @@ contract ReinvestmentControllerInitializeTest is ReinvestmentControllerTestBase 
   }
 
   function test_initialize_allowsZeroMaxInvest() public {
-    fresh.initialize(admin, DEPOSIT_TIMELOCK, 0, MAX_INVEST_BPS, BUFFER_BPS);
+    fresh.initialize(admin, DEPOSIT_TIMELOCK, 0, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
 
     assertEq(fresh.maxInvest(), 0);
     assertEq(fresh.getInvestableAmount(), 0);
@@ -99,7 +104,7 @@ contract ReinvestmentControllerInitializeTest is ReinvestmentControllerTestBase 
 
   function test_initialize_callableByAnyone() public {
     vm.prank(alice);
-    fresh.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, BUFFER_BPS);
+    fresh.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
 
     assertTrue(fresh.hasRole(fresh.DEFAULT_ADMIN_ROLE(), admin));
     assertFalse(fresh.hasRole(fresh.DEFAULT_ADMIN_ROLE(), alice));
@@ -107,53 +112,74 @@ contract ReinvestmentControllerInitializeTest is ReinvestmentControllerTestBase 
 
   function test_initialize_revertsWith_InvalidZeroAddress() public {
     vm.expectRevert(IReinvestmentController.InvalidZeroAddress.selector);
-    fresh.initialize(address(0), DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, BUFFER_BPS);
+    fresh.initialize(address(0), DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
   }
 
   function test_initialize_revertsWith_InvalidAmount_depositTimelockIsZero() public {
     vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
-    fresh.initialize(admin, 0, MAX_INVEST, MAX_INVEST_BPS, BUFFER_BPS);
+    fresh.initialize(admin, 0, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
   }
 
   function test_initialize_revertsWith_InvalidAmount_maxInvestBpsIsZero() public {
     vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
-    fresh.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, 0, BUFFER_BPS);
+    fresh.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, 0, MAX_FEE, BUFFER_BPS);
   }
 
   function test_initialize_revertsWith_InvalidAmount_maxInvestBpsAtPercentageFactor() public {
     vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
-    fresh.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, PERCENTAGE_FACTOR, BUFFER_BPS);
+    fresh.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, PERCENTAGE_FACTOR, MAX_FEE, BUFFER_BPS);
   }
 
   function test_initialize_revertsWith_InvalidAmount_maxInvestBpsAbovePercentageFactor() public {
     vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
-    fresh.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, PERCENTAGE_FACTOR + 1, BUFFER_BPS);
+    fresh.initialize(
+      admin,
+      DEPOSIT_TIMELOCK,
+      MAX_INVEST,
+      PERCENTAGE_FACTOR + 1,
+      MAX_FEE,
+      BUFFER_BPS
+    );
   }
 
   function test_initialize_revertsWith_InvalidAmount_bufferBpsIsZero() public {
     vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
-    fresh.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, 0);
+    fresh.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, 0);
   }
 
   function test_initialize_revertsWith_InvalidAmount_bufferBpsAtPercentageFactor() public {
     vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
-    fresh.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, PERCENTAGE_FACTOR);
+    fresh.initialize(
+      admin,
+      DEPOSIT_TIMELOCK,
+      MAX_INVEST,
+      MAX_INVEST_BPS,
+      MAX_FEE,
+      PERCENTAGE_FACTOR
+    );
   }
 
   function test_initialize_revertsWith_InvalidAmount_bufferBpsAbovePercentageFactor() public {
     vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
-    fresh.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, PERCENTAGE_FACTOR + 1);
+    fresh.initialize(
+      admin,
+      DEPOSIT_TIMELOCK,
+      MAX_INVEST,
+      MAX_INVEST_BPS,
+      MAX_FEE,
+      PERCENTAGE_FACTOR + 1
+    );
   }
 
   function test_initialize_revertsWith_InvalidInitialization_calledTwice() public {
-    fresh.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, BUFFER_BPS);
+    fresh.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
 
     vm.expectRevert(Initializable.InvalidInitialization.selector);
-    fresh.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, BUFFER_BPS);
+    fresh.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
   }
 
   function test_initialize_revertsWith_InvalidInitialization_proxyInitializedAtDeployment() public {
     vm.expectRevert(Initializable.InvalidInitialization.selector);
-    controller.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, BUFFER_BPS);
+    controller.initialize(admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
   }
 }

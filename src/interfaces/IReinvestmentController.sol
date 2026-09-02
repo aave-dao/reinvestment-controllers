@@ -3,11 +3,12 @@ pragma solidity 0.8.29;
 
 import {IERC20} from '@openzeppelin/contracts/interfaces/IERC20.sol';
 import {IERC1271} from '@openzeppelin/contracts/interfaces/IERC1271.sol';
+import {IAccessControl} from '@openzeppelin/contracts/access/IAccessControl.sol';
 import {IHub} from 'aave-v4/hub/interfaces/IHub.sol';
 import {IGatewayMinter} from './IGatewayMinter.sol';
 import {IGatewayWallet} from './IGatewayWallet.sol';
 
-interface IReinvestmentController is IERC1271 {
+interface IReinvestmentController is IERC1271, IAccessControl {
   /// @dev Burn intent exceeds the invested amount
   error BurnIntentExceedsBalance();
 
@@ -56,6 +57,9 @@ interface IReinvestmentController is IERC1271 {
   /// @dev Provided address cannot be the zero-address
   error InvalidZeroAddress();
 
+  /// @dev Fee in the burn intent exceeds the maximum allowed fee
+  error MaxFeeExceeded();
+
   /// @dev Amount to be deposited cannot exceed max investable amount
   error MaximumInvestAmountExceeded();
 
@@ -71,12 +75,18 @@ interface IReinvestmentController is IERC1271 {
 
   /// @dev Emitted when funds are divested
   /// @param amount The amount of funds divested
-  event Divested(uint256 amount);
+  /// @param fee The fee pre-paid by the caller to keep the Hub's swept accounting exact
+  event Divested(uint256 amount, uint256 fee);
 
   /// @dev Emitted when the deposit timelock is updated
   /// @param oldDepositTimelock The old deposit timelock
   /// @param depositTimelock The new deposit timelock
   event SetDepositTimelock(uint256 oldDepositTimelock, uint256 depositTimelock);
+
+  /// @dev Emitted when the maximum allowed burn intent fee is updated
+  /// @param oldMaxFee The old maximum fee
+  /// @param maxFee The new maximum fee
+  event SetMaxFee(uint256 oldMaxFee, uint256 maxFee);
 
   /// @dev Emitted when the maximum investable amount (in absolute terms) is updated
   /// @param oldMaxInvest The old maximum investable amount
@@ -110,12 +120,14 @@ interface IReinvestmentController is IERC1271 {
   /// @param depositTimelock_ The initial deposit timelock (in seconds)
   /// @param maxInvest_ The initial maximum investable amount (in absolute terms)
   /// @param maxInvestBps_ The initial maximum investable amount (in BPS)
+  /// @param maxFee_ The initial maximum fee payable on a withdrawal (in absolute terms)
   /// @param bufferBps_ The initial minimum uninvested buffer (in BPS)
   function initialize(
     address admin,
     uint256 depositTimelock_,
     uint256 maxInvest_,
     uint256 maxInvestBps_,
+    uint256 maxFee_,
     uint256 bufferBps_
   ) external;
 
@@ -126,6 +138,16 @@ interface IReinvestmentController is IERC1271 {
   /// @notice Divests amount of funds from USDC Gateway
   /// @dev Bounded only by the swept balance. Circle caps attestation size off-chain, and the
   /// Gateway contracts impose no on-chain limit
+  /// @dev The attestation names this contract as recipient, so the mint lands here and is then
+  /// transferred on to the Hub, rather than naming the Hub directly and letting {reclaim} find
+  /// the funds already there. {reclaim} only requires the Hub's aggregate balance to cover the
+  /// reclaimed amount, a floor any unrelated USDC satisfies, so routing the mint through this
+  /// contract is what proves the funds returned are the funds withdrawn. It also keeps every
+  /// field of the transfer spec pinned to `self`
+  /// @dev The caller must hold and have approved {maxFee} of USDC. It is forwarded to the Hub
+  /// alongside the minted amount, because the Gateway debits `amount + fee` when Circle later
+  /// burns. Reclaiming `amount + maxFee` keeps the Hub's swept figure matched to the balance
+  /// actually held at the Gateway, rather than overstating it by the fee on every divest
   /// @param amount The amount of funds to withdraw
   /// @param attestationPayload The specification of the withdrawal
   /// @param signature The signature that validates attestation was originated by authorized entity
@@ -162,6 +184,16 @@ interface IReinvestmentController is IERC1271 {
   /// @dev Sets the minimum amount of buffer that must be left on the Hub uninvested (in BPS)
   /// @param buffer New buffer amount (in BPS)
   function setBufferBps(uint256 buffer) external;
+
+  /// @notice Sets the maximum fee that can be paid to the Gateway operator on a withdrawal
+  /// Can be set to 0 to reject any fee-bearing withdrawal
+  /// @dev Pause and let outstanding intents settle before lowering. {isValidSignature} checks
+  /// the cap at signing time, but a signed intent stays valid at the Gateway afterwards, so a
+  /// lower cap makes {divest} pre-pay less than Circle can still charge against an intent
+  /// signed under the old one. {divest} cannot detect this, as an attestation carries no fee
+  /// field. Pausing blocks {isValidSignature}, so no new intent can be signed meanwhile
+  /// @param maxFee_ The new maximum fee (in absolute terms)
+  function setMaxFee(uint256 maxFee_) external;
 
   /// @notice Sets the maximum amount that can be invested (in absolute terms)
   /// Can be set to 0 to sunset ReinvestmentController
@@ -210,6 +242,13 @@ interface IReinvestmentController is IERC1271 {
   /// @return The amount invested
   function getInvestedAmount() external view returns (uint256);
 
+  /// @notice Returns the amount by which the Hub's swept figure exceeds the balance actually
+  /// held at the Gateway
+  /// @dev Zero in normal operation, since {divest} pre-pays the fee. A non-zero value means a
+  /// burn charged more than was pre-paid, and that much of the Hub's asset base is unbacked
+  /// @return The unbacked amount
+  function getDrift() external view returns (uint256);
+
   /// @notice Validates an ERC-1271 signature over a Circle Gateway burn intent
   /// @dev Called by the Gateway to confirm this contract authorized a withdrawal, as the
   /// contract is the depositor, recipient and signer of every burn intent it submits.
@@ -228,6 +267,13 @@ interface IReinvestmentController is IERC1271 {
   /// @notice Returns the deposit timelock
   /// @return The timelock (in seconds)
   function depositTimelock() external view returns (uint256);
+
+  /// @notice Returns the maximum fee payable to the Gateway operator on a withdrawal
+  /// @dev Compared against the `maxFee` field of a burn intent, which bounds what the operator
+  /// may charge. The Gateway wallet debits `value + fee`, so the fee is drawn from the invested
+  /// balance on top of the amount withdrawn
+  /// @return The maximum fee (in absolute terms)
+  function maxFee() external view returns (uint256);
 
   /// @notice Returns the maximum amount that can be invested (in absolute terms) at any time
   /// @dev Can be set to zero to sunset ReinvestmentController

@@ -21,6 +21,7 @@ abstract contract ReinvestmentControllerTestBase is Test, GatewayPayloads {
   uint256 internal constant MAX_INVEST = 10_000_000e6;
   uint256 internal constant MAX_INVEST_BPS = 8_000;
   uint256 internal constant BUFFER_BPS = 1_000;
+  uint256 internal constant MAX_FEE = 0;
   uint256 internal constant PERCENTAGE_FACTOR = 100_00;
 
   uint256 internal constant SUPPLIED = 1_000_000e6;
@@ -68,13 +69,14 @@ abstract contract ReinvestmentControllerTestBase is Test, GatewayPayloads {
       address(hub),
       address(usdc)
     );
+
     controller = ReinvestmentController(
       address(
         new ERC1967Proxy(
           address(implementation),
           abi.encodeCall(
             IReinvestmentController.initialize,
-            (admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, BUFFER_BPS)
+            (admin, DEPOSIT_TIMELOCK, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS)
           )
         )
       )

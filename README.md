@@ -16,6 +16,27 @@ implementation; limits and roles are set in `initialize`.
 How much can be invested is bounded by `maxInvest`, `maxInvestBps` and a `bufferBps` of Hub
 liquidity that must stay idle. Set `maxInvest` to zero to sunset.
 
+## Fee accounting
+
+The Gateway debits `amount + fee` when Circle burns, but mints only `amount`. Left alone,
+each divest leaves the Hub's `swept` figure overstating the balance actually recoverable at
+the Gateway. That is not just an unrecoverable balance: `swept` is counted at face value in
+the Hub's `totalAddedAssets`, so the gap prices into supplier shares as phantom assets, and
+the Hub has no way to write it down — `reportDeficit` is spoke-only and untied to `swept`.
+
+So `divest` pre-pays: the caller transfers `maxFee` in, and the controller reclaims
+`amount + maxFee`. The drift never exists rather than being repaired after the fact. `getDrift`
+reports any residue, which should be zero in normal operation.
+
+The attestation names **the controller** as `destinationRecipient`, not the Hub. Minting
+straight to the Hub would remove the transfer, but `Hub.reclaim` only checks that the Hub's
+aggregate balance covers `liquidity + amount` — a floor any USDC sitting there satisfies,
+whatever its origin. Routing through the controller keeps the chain self-verifying: it
+receives exactly `amount`, transfers exactly `amount + maxFee`, reclaims the same, each step
+proven by its own balance rather than by a balance coincidence at the Hub. It also keeps
+`_validateTransferSpec` pinning depositor, recipient, signer and destination caller all to
+`self`, which is what makes the spec check easy to audit.
+
 ## Trust assumptions
 
 The Gateway is Circle's. We depend on them for:

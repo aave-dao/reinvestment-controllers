@@ -23,10 +23,10 @@ import {IGatewayWallet} from './interfaces/IGatewayWallet.sol';
 import {IReinvestmentController} from './interfaces/IReinvestmentController.sol';
 
 contract ReinvestmentController is
-  IReinvestmentController,
   Initializable,
   AccessControlUpgradeable,
-  PausableUpgradeable
+  PausableUpgradeable,
+  IReinvestmentController
 {
   using SafeERC20 for IERC20;
   using TransferSpecLib for bytes29;

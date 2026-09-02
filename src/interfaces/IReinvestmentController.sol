@@ -3,11 +3,12 @@ pragma solidity 0.8.29;
 
 import {IERC20} from '@openzeppelin/contracts/interfaces/IERC20.sol';
 import {IERC1271} from '@openzeppelin/contracts/interfaces/IERC1271.sol';
+import {IAccessControl} from '@openzeppelin/contracts/access/IAccessControl.sol';
 import {IHub} from 'aave-v4/hub/interfaces/IHub.sol';
 import {IGatewayMinter} from './IGatewayMinter.sol';
 import {IGatewayWallet} from './IGatewayWallet.sol';
 
-interface IReinvestmentController is IERC1271 {
+interface IReinvestmentController is IERC1271, IAccessControl {
   /// @dev Burn intent exceeds the invested amount
   error BurnIntentExceedsBalance();
 
@@ -137,6 +138,12 @@ interface IReinvestmentController is IERC1271 {
   /// @notice Divests amount of funds from USDC Gateway
   /// @dev Bounded only by the swept balance. Circle caps attestation size off-chain, and the
   /// Gateway contracts impose no on-chain limit
+  /// @dev The attestation names this contract as recipient, so the mint lands here and is then
+  /// transferred on to the Hub, rather than naming the Hub directly and letting {reclaim} find
+  /// the funds already there. {reclaim} only requires the Hub's aggregate balance to cover the
+  /// reclaimed amount, a floor any unrelated USDC satisfies, so routing the mint through this
+  /// contract is what proves the funds returned are the funds withdrawn. It also keeps every
+  /// field of the transfer spec pinned to `self`
   /// @dev The caller must hold and have approved {maxFee} of USDC. It is forwarded to the Hub
   /// alongside the minted amount, because the Gateway debits `amount + fee` when Circle later
   /// burns. Reclaiming `amount + maxFee` keeps the Hub's swept figure matched to the balance
@@ -180,6 +187,11 @@ interface IReinvestmentController is IERC1271 {
 
   /// @notice Sets the maximum fee that can be paid to the Gateway operator on a withdrawal
   /// Can be set to 0 to reject any fee-bearing withdrawal
+  /// @dev Pause and let outstanding intents settle before lowering. {isValidSignature} checks
+  /// the cap at signing time, but a signed intent stays valid at the Gateway afterwards, so a
+  /// lower cap makes {divest} pre-pay less than Circle can still charge against an intent
+  /// signed under the old one. {divest} cannot detect this, as an attestation carries no fee
+  /// field. Pausing blocks {isValidSignature}, so no new intent can be signed meanwhile
   /// @param maxFee_ The new maximum fee (in absolute terms)
   function setMaxFee(uint256 maxFee_) external;
 

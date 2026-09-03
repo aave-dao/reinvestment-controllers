@@ -58,9 +58,9 @@ contract ReinvestmentControllerInvestTest is ReinvestmentControllerTestBase {
     assertEq(controller.getInvestableAmount(), INVESTABLE - INVESTABLE / 4);
   }
 
-  function test_invest_leavesBufferUntouchedWhenTheBufferIsTheBindingLimit() public {
+  function test_invest_leavesLiquidBufferUntouchedWhenTheLiquidBufferIsTheBindingLimit() public {
     vm.prank(admin);
-    controller.setMaxInvestBps(PERCENTAGE_FACTOR - 1);
+    controller.setExposureCapBps(PERCENTAGE_FACTOR - 1);
 
     uint256 investable = controller.getInvestableAmount();
 
@@ -240,36 +240,36 @@ contract ReinvestmentControllerInvestTest is ReinvestmentControllerTestBase {
     controller.invest(0);
   }
 
-  function test_invest_revertsWith_MaximumInvestAmountExceeded_aboveInvestable() public {
-    vm.expectRevert(IReinvestmentController.MaximumInvestAmountExceeded.selector);
+  function test_invest_revertsWith_ExposureCapExceeded_aboveInvestable() public {
+    vm.expectRevert(IReinvestmentController.ExposureCapExceeded.selector);
     vm.prank(keeper);
     controller.invest(INVESTABLE + 1);
   }
 
-  function test_invest_revertsWith_MaximumInvestAmountExceeded_maxInvestIsZero() public {
+  function test_invest_revertsWith_ExposureCapExceeded_exposureCapAbsIsZero() public {
     vm.prank(admin);
-    controller.setMaxInvest(0);
+    controller.setExposureCapAbs(0);
 
-    vm.expectRevert(IReinvestmentController.MaximumInvestAmountExceeded.selector);
+    vm.expectRevert(IReinvestmentController.ExposureCapExceeded.selector);
     vm.prank(keeper);
     controller.invest(1);
   }
 
-  function test_invest_revertsWith_MaximumInvestAmountExceeded_idleAtBuffer() public {
+  function test_invest_revertsWith_ExposureCapExceeded_idleAtLiquidBuffer() public {
     hub.setAccounting(SUPPLIED, BUFFER, 0);
 
-    vm.expectRevert(IReinvestmentController.MaximumInvestAmountExceeded.selector);
+    vm.expectRevert(IReinvestmentController.ExposureCapExceeded.selector);
     vm.prank(keeper);
     controller.invest(1);
   }
 
-  function test_invest_revertsWith_MaximumInvestAmountExceeded_capRoomExhausted() public {
+  function test_invest_revertsWith_ExposureCapExceeded_capRoomExhausted() public {
     vm.prank(keeper);
     controller.invest(INVESTABLE);
 
     vm.warp(block.timestamp + INVEST_MIN_DELAY + 1);
 
-    vm.expectRevert(IReinvestmentController.MaximumInvestAmountExceeded.selector);
+    vm.expectRevert(IReinvestmentController.ExposureCapExceeded.selector);
     vm.prank(keeper);
     controller.invest(1);
   }

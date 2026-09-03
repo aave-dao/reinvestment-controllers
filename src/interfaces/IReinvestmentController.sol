@@ -60,8 +60,8 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// @dev Fee in the burn intent exceeds the maximum allowed fee
   error MaxFeeExceeded();
 
-  /// @dev Amount to be deposited cannot exceed max investable amount
-  error MaximumInvestAmountExceeded();
+  /// @dev Amount to be deposited cannot exceed the configured exposure caps
+  error ExposureCapExceeded();
 
   /// @dev No pending on-chain withdrawal
   error NoWithdrawalInProcess();
@@ -88,20 +88,20 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// @param maxFee The new maximum fee
   event SetMaxFee(uint256 oldMaxFee, uint256 maxFee);
 
-  /// @dev Emitted when the maximum investable amount (in absolute terms) is updated
-  /// @param oldMaxInvest The old maximum investable amount
-  /// @param maxInvest The new maximum investable amount
-  event SetMaxInvest(uint256 oldMaxInvest, uint256 maxInvest);
+  /// @dev Emitted when the exposure cap (in absolute terms) is updated
+  /// @param oldExposureCapAbs The old exposure cap
+  /// @param exposureCapAbs The new exposure cap
+  event SetExposureCapAbs(uint256 oldExposureCapAbs, uint256 exposureCapAbs);
 
-  /// @dev Emitted when the maximum investable amount (in BPS) is updated
-  /// @param oldMaxInvestBps The old maximum investable amount
-  /// @param maxInvestBps The new maximum investable amount
-  event SetMaxInvestBps(uint256 oldMaxInvestBps, uint256 maxInvestBps);
+  /// @dev Emitted when the exposure cap (in BPS of supplied assets) is updated
+  /// @param oldExposureCapBps The old exposure cap
+  /// @param exposureCapBps The new exposure cap
+  event SetExposureCapBps(uint256 oldExposureCapBps, uint256 exposureCapBps);
 
-  /// @dev Emitted when the minimum uninvestable amount buffer (in BPS) is updated
-  /// @param oldBufferBps The old minimum buffer amount
-  /// @param bufferBps The new  minimum buffer amount
-  event SetBufferBps(uint256 oldBufferBps, uint256 bufferBps);
+  /// @dev Emitted when the liquid buffer (in BPS) is updated
+  /// @param oldLiquidBufferBps The old liquid buffer
+  /// @param liquidBufferBps The new liquid buffer
+  event SetLiquidBufferBps(uint256 oldLiquidBufferBps, uint256 liquidBufferBps);
 
   /// @dev Emitted when an on-chain withdrawal is completed
   /// @param amount The amount of funds withdrawn
@@ -118,17 +118,17 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// here, so changing one requires deploying a new implementation and upgrading to it.
   /// @param admin The address granted both DEFAULT_ADMIN_ROLE and KEEPER_ROLE
   /// @param investMinDelay_ The initial minimum delay between invests (in seconds)
-  /// @param maxInvest_ The initial maximum investable amount (in absolute terms)
-  /// @param maxInvestBps_ The initial maximum investable amount (in BPS)
+  /// @param exposureCapAbs_ The initial exposure cap (in absolute terms)
+  /// @param exposureCapBps_ The initial exposure cap (in BPS of supplied assets)
   /// @param maxFee_ The initial maximum fee payable on a withdrawal (in absolute terms)
-  /// @param bufferBps_ The initial minimum uninvested buffer (in BPS)
+  /// @param liquidBufferBps_ The initial liquid buffer (in BPS)
   function initialize(
     address admin,
     uint256 investMinDelay_,
-    uint256 maxInvest_,
-    uint256 maxInvestBps_,
+    uint256 exposureCapAbs_,
+    uint256 exposureCapBps_,
     uint256 maxFee_,
-    uint256 bufferBps_
+    uint256 liquidBufferBps_
   ) external;
 
   /// @notice Invests amount of funds into USDC Gateway
@@ -181,9 +181,9 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// @param investMinDelay_ The new minimum delay between invests (in seconds)
   function setInvestMinDelay(uint256 investMinDelay_) external;
 
-  /// @dev Sets the minimum amount of buffer that must be left on the Hub uninvested (in BPS)
-  /// @param buffer New buffer amount (in BPS)
-  function setBufferBps(uint256 buffer) external;
+  /// @notice Sets the liquid buffer that must be left on the Hub uninvested (in BPS)
+  /// @param liquidBufferBps The new liquid buffer (in BPS)
+  function setLiquidBufferBps(uint256 liquidBufferBps) external;
 
   /// @notice Sets the maximum fee that can be paid to the Gateway operator on a withdrawal
   /// Can be set to 0 to reject any fee-bearing withdrawal
@@ -199,14 +199,14 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// @param maxFee_ The new maximum fee (in absolute terms)
   function setMaxFee(uint256 maxFee_) external;
 
-  /// @notice Sets the maximum amount that can be invested (in absolute terms)
+  /// @notice Sets the exposure cap (in absolute terms)
   /// Can be set to 0 to sunset ReinvestmentController
-  /// @param maxAmount The new maximum amount (in absolute terms)
-  function setMaxInvest(uint256 maxAmount) external;
+  /// @param newExposureCapAbs The new exposure cap
+  function setExposureCapAbs(uint256 newExposureCapAbs) external;
 
-  /// @dev Sets the maximum amount that can be invested (in BPS)
-  /// @dev maxBps New maximum amount (in BPS)
-  function setMaxInvestBps(uint256 maxBps) external;
+  /// @notice Sets the exposure cap (in BPS of supplied assets)
+  /// @param newExposureCapBps The new exposure cap
+  function setExposureCapBps(uint256 newExposureCapBps) external;
 
   /// @notice Returns the identifier of the KEEPER Role
   /// @return The bytes32 id hash of the KEEPER_ROLE
@@ -285,18 +285,18 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// @return The maximum fee (in absolute terms)
   function getMaxFee() external view returns (uint256);
 
-  /// @notice Returns the maximum amount that can be invested (in absolute terms) at any time
+  /// @notice Returns the exposure cap (in absolute terms)
   /// @dev Can be set to zero to sunset ReinvestmentController
-  /// @return The amount that can be invested
-  function getMaxInvest() external view returns (uint256);
+  /// @return The exposure cap
+  function getExposureCapAbs() external view returns (uint256);
 
-  /// @notice Returns the maximum amount that can be invested (in BPS) at any time
-  /// @return The amount that can be invested (in BPS)
-  function getMaxInvestBps() external view returns (uint256);
+  /// @notice Returns the exposure cap (in BPS of supplied assets)
+  /// @return The exposure cap
+  function getExposureCapBps() external view returns (uint256);
 
   /// @notice Returns the minimum amount that must remain uninvested in the Hub
   /// @return The amount that must remain uninvested (in BPS)
-  function getBufferBps() external view returns (uint256);
+  function getLiquidBufferBps() external view returns (uint256);
 
   /// @notice Returns the timestamp of the most recent pause, or zero if not paused
   /// @return The timestamp at which {pause} was last called

@@ -9,9 +9,9 @@ contract ReinvestmentControllerStorageTest is ReinvestmentControllerTestBase {
 
   uint256 internal constant INVEST_MIN_DELAY_OFFSET = 0;
   uint256 internal constant LAST_INVEST_TIMESTAMP_OFFSET = 1;
-  uint256 internal constant BUFFER_BPS_OFFSET = 2;
-  uint256 internal constant MAX_INVEST_OFFSET = 3;
-  uint256 internal constant MAX_INVEST_BPS_OFFSET = 4;
+  uint256 internal constant LIQUID_BUFFER_BPS_OFFSET = 2;
+  uint256 internal constant EXPOSURE_CAP_ABS_OFFSET = 3;
+  uint256 internal constant EXPOSURE_CAP_BPS_OFFSET = 4;
   uint256 internal constant MAX_FEE_OFFSET = 5;
   uint256 internal constant PAUSED_AT_OFFSET = 6;
 
@@ -33,9 +33,9 @@ contract ReinvestmentControllerStorageTest is ReinvestmentControllerTestBase {
 
     assertEq(_load(INVEST_MIN_DELAY_OFFSET), controller.getInvestMinDelay());
     assertEq(_load(LAST_INVEST_TIMESTAMP_OFFSET), controller.getLastInvestTimestamp());
-    assertEq(_load(BUFFER_BPS_OFFSET), controller.getBufferBps());
-    assertEq(_load(MAX_INVEST_OFFSET), controller.getMaxInvest());
-    assertEq(_load(MAX_INVEST_BPS_OFFSET), controller.getMaxInvestBps());
+    assertEq(_load(LIQUID_BUFFER_BPS_OFFSET), controller.getLiquidBufferBps());
+    assertEq(_load(EXPOSURE_CAP_ABS_OFFSET), controller.getExposureCapAbs());
+    assertEq(_load(EXPOSURE_CAP_BPS_OFFSET), controller.getExposureCapBps());
     assertEq(_load(MAX_FEE_OFFSET), controller.getMaxFee());
     assertEq(_load(PAUSED_AT_OFFSET), controller.getPausedAt());
   }

@@ -18,9 +18,9 @@ import {GatewayPayloads} from './utils/GatewayPayloads.sol';
 abstract contract ReinvestmentControllerTestBase is Test, GatewayPayloads {
   uint256 internal constant WITHDRAWAL_DELAY = 7;
   uint256 internal constant INVEST_MIN_DELAY = 1 days;
-  uint256 internal constant MAX_INVEST = 10_000_000e6;
-  uint256 internal constant MAX_INVEST_BPS = 8_000;
-  uint256 internal constant BUFFER_BPS = 1_000;
+  uint256 internal constant EXPOSURE_CAP_ABS = 10_000_000e6;
+  uint256 internal constant EXPOSURE_CAP_BPS = 8_000;
+  uint256 internal constant LIQUID_BUFFER_BPS = 1_000;
   uint256 internal constant MAX_FEE = 0;
   uint256 internal constant PERCENTAGE_FACTOR = 100_00;
 
@@ -76,7 +76,14 @@ abstract contract ReinvestmentControllerTestBase is Test, GatewayPayloads {
           address(implementation),
           abi.encodeCall(
             IReinvestmentController.initialize,
-            (admin, INVEST_MIN_DELAY, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS)
+            (
+              admin,
+              INVEST_MIN_DELAY,
+              EXPOSURE_CAP_ABS,
+              EXPOSURE_CAP_BPS,
+              MAX_FEE,
+              LIQUID_BUFFER_BPS
+            )
           )
         )
       )

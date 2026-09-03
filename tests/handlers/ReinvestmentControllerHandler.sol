@@ -128,19 +128,19 @@ contract ReinvestmentControllerHandler is CommonBase, StdCheats, StdUtils, Gatew
     withdrawCalls++;
   }
 
-  function setBufferBps(uint256 bufferBps) external {
+  function setLiquidBufferBps(uint256 liquidBufferBps) external {
     vm.prank(ADMIN);
-    CONTROLLER.setBufferBps(bound(bufferBps, 1, PERCENTAGE_FACTOR - 1));
+    CONTROLLER.setLiquidBufferBps(bound(liquidBufferBps, 1, PERCENTAGE_FACTOR - 1));
   }
 
-  function setMaxInvest(uint256 maxInvest) external {
+  function setExposureCapAbs(uint256 exposureCapAbs) external {
     vm.prank(ADMIN);
-    CONTROLLER.setMaxInvest(bound(maxInvest, 0, type(uint96).max));
+    CONTROLLER.setExposureCapAbs(bound(exposureCapAbs, 0, type(uint96).max));
   }
 
-  function setMaxInvestBps(uint256 maxInvestBps) external {
+  function setExposureCapBps(uint256 exposureCapBps) external {
     vm.prank(ADMIN);
-    CONTROLLER.setMaxInvestBps(bound(maxInvestBps, 1, PERCENTAGE_FACTOR - 1));
+    CONTROLLER.setExposureCapBps(bound(exposureCapBps, 1, PERCENTAGE_FACTOR - 1));
   }
 
   function setInvestMinDelay(uint256 investMinDelay) external {

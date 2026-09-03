@@ -14,32 +14,37 @@ contract ReinvestmentControllerGetInvestableAmountTest is ReinvestmentController
     uint256 supplied,
     uint256 idle,
     uint256 swept,
-    uint256 bufferBps_,
-    uint256 maxInvest_,
-    uint256 maxInvestBps_
+    uint256 liquidBufferBps_,
+    uint256 exposureCapAbs_,
+    uint256 exposureCapBps_
   ) public {
     supplied = bound(supplied, 0, type(uint96).max);
     idle = bound(idle, 0, type(uint96).max);
     swept = bound(swept, 0, type(uint96).max);
-    bufferBps_ = bound(bufferBps_, 1, PERCENTAGE_FACTOR - 1);
-    maxInvest_ = bound(maxInvest_, 0, type(uint96).max);
-    maxInvestBps_ = bound(maxInvestBps_, 1, PERCENTAGE_FACTOR - 1);
+    liquidBufferBps_ = bound(liquidBufferBps_, 1, PERCENTAGE_FACTOR - 1);
+    exposureCapAbs_ = bound(exposureCapAbs_, 0, type(uint96).max);
+    exposureCapBps_ = bound(exposureCapBps_, 1, PERCENTAGE_FACTOR - 1);
 
     hub.setAccounting(supplied, idle, swept);
 
     vm.startPrank(admin);
-    controller.setBufferBps(bufferBps_);
-    controller.setMaxInvest(maxInvest_);
-    controller.setMaxInvestBps(maxInvestBps_);
+    controller.setLiquidBufferBps(liquidBufferBps_);
+    controller.setExposureCapAbs(exposureCapAbs_);
+    controller.setExposureCapBps(exposureCapBps_);
     vm.stopPrank();
 
-    uint256 buffer = Math.mulDiv(supplied, bufferBps_, PERCENTAGE_FACTOR, Math.Rounding.Ceil);
+    uint256 liquidBuffer = Math.mulDiv(
+      supplied,
+      liquidBufferBps_,
+      PERCENTAGE_FACTOR,
+      Math.Rounding.Ceil
+    );
     uint256 capLimit = Math.min(
-      maxInvest_,
-      Math.mulDiv(supplied, maxInvestBps_, PERCENTAGE_FACTOR, Math.Rounding.Floor)
+      exposureCapAbs_,
+      Math.mulDiv(supplied, exposureCapBps_, PERCENTAGE_FACTOR, Math.Rounding.Floor)
     );
     uint256 capRoom = capLimit > swept ? capLimit - swept : 0;
-    uint256 expected = idle <= buffer ? 0 : Math.min(idle - buffer, capRoom);
+    uint256 expected = idle <= liquidBuffer ? 0 : Math.min(idle - liquidBuffer, capRoom);
 
     assertEq(controller.getInvestableAmount(), expected);
   }
@@ -50,19 +55,19 @@ contract ReinvestmentControllerGetInvestableAmountTest is ReinvestmentController
     assertEq(controller.getInvestableAmount(), 0);
   }
 
-  function test_getInvestableAmount_zeroWhenIdleIsBelowBuffer() public {
+  function test_getInvestableAmount_zeroWhenIdleIsBelowLiquidBuffer() public {
     hub.setAccounting(SUPPLIED, BUFFER - 1, 0);
 
     assertEq(controller.getInvestableAmount(), 0);
   }
 
-  function test_getInvestableAmount_zeroWhenIdleEqualsBuffer() public {
+  function test_getInvestableAmount_zeroWhenIdleEqualsLiquidBuffer() public {
     hub.setAccounting(SUPPLIED, BUFFER, 0);
 
     assertEq(controller.getInvestableAmount(), 0);
   }
 
-  function test_getInvestableAmount_oneWhenIdleExceedsBufferByOne() public {
+  function test_getInvestableAmount_oneWhenIdleExceedsLiquidBufferByOne() public {
     hub.setAccounting(SUPPLIED, BUFFER + 1, 0);
 
     assertEq(controller.getInvestableAmount(), 1);
@@ -76,21 +81,21 @@ contract ReinvestmentControllerGetInvestableAmountTest is ReinvestmentController
 
   function test_getInvestableAmount_absoluteCapBindsBelowBpsCap() public {
     vm.prank(admin);
-    controller.setMaxInvest(1_234e6);
+    controller.setExposureCapAbs(1_234e6);
 
     assertEq(controller.getInvestableAmount(), 1_234e6);
   }
 
   function test_getInvestableAmount_bpsCapBindsBelowAbsoluteCap() public {
     vm.prank(admin);
-    controller.setMaxInvestBps(250);
+    controller.setExposureCapBps(250);
 
     assertEq(controller.getInvestableAmount(), (SUPPLIED * 250) / PERCENTAGE_FACTOR);
   }
 
-  function test_getInvestableAmount_zeroWhenMaxInvestIsZero() public {
+  function test_getInvestableAmount_zeroWhenExposureCapAbsIsZero() public {
     vm.prank(admin);
-    controller.setMaxInvest(0);
+    controller.setExposureCapAbs(0);
 
     assertEq(controller.getInvestableAmount(), 0);
   }
@@ -139,7 +144,7 @@ contract ReinvestmentControllerGetInvestableAmountTest is ReinvestmentController
     assertEq(controller.getInvestableAmount(), INVESTABLE - 100_000e6);
   }
 
-  function test_getInvestableAmount_roundsBufferUp() public {
+  function test_getInvestableAmount_roundsLiquidBufferUp() public {
     hub.setAccounting(10_001, 1_001, 0);
 
     assertEq(controller.getInvestableAmount(), 0);
@@ -149,8 +154,8 @@ contract ReinvestmentControllerGetInvestableAmountTest is ReinvestmentController
     hub.setAccounting(10_001, 10_001, 0);
 
     vm.startPrank(admin);
-    controller.setBufferBps(1);
-    controller.setMaxInvestBps(5_000);
+    controller.setLiquidBufferBps(1);
+    controller.setExposureCapBps(5_000);
     vm.stopPrank();
 
     assertEq(controller.getInvestableAmount(), 5_000);

@@ -125,7 +125,7 @@ contract ReinvestmentController is
 
   /// @inheritdoc IReinvestmentController
   function invest(uint256 amount) external onlyRole(KEEPER_ROLE) whenNotPaused {
-    require(block.timestamp > _lastInvestTimestamp + _investMinDelay, InvestMinDelayNotElapsed());
+    require(block.timestamp >= _lastInvestTimestamp + _investMinDelay, InvestMinDelayNotElapsed());
     require(amount > 0, InvalidAmount());
     require(amount <= _getInvestableAmount(), MaximumInvestAmountExceeded());
 

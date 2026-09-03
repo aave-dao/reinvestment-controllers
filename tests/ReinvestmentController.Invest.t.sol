@@ -84,8 +84,21 @@ contract ReinvestmentControllerInvestTest is ReinvestmentControllerTestBase {
     assertEq(wallet.availableBalance(address(usdc), address(controller)), 3_000e6);
   }
 
+  function test_invest_atExactMinDelayExpiry() public {
+    vm.prank(keeper);
+    controller.invest(1_000e6);
+
+    vm.warp(block.timestamp + INVEST_MIN_DELAY);
+
+    vm.prank(keeper);
+    controller.invest(2_000e6);
+
+    assertEq(controller.getInvestedAmount(), 3_000e6);
+    assertEq(wallet.availableBalance(address(usdc), address(controller)), 3_000e6);
+  }
+
   function test_invest_afterAnyElapsedMinDelay(uint256 elapsed) public {
-    elapsed = bound(elapsed, INVEST_MIN_DELAY + 1, 365 days);
+    elapsed = bound(elapsed, INVEST_MIN_DELAY, 365 days);
 
     vm.prank(keeper);
     controller.invest(1_000e6);
@@ -187,11 +200,11 @@ contract ReinvestmentControllerInvestTest is ReinvestmentControllerTestBase {
     controller.invest(1_000e6);
   }
 
-  function test_invest_revertsWith_InvestMinDelayNotElapsed_atExactExpiry() public {
+  function test_invest_revertsWith_InvestMinDelayNotElapsed_oneSecondBeforeExpiry() public {
     vm.prank(keeper);
     controller.invest(1_000e6);
 
-    vm.warp(block.timestamp + INVEST_MIN_DELAY);
+    vm.warp(block.timestamp + INVEST_MIN_DELAY - 1);
 
     vm.expectRevert(IReinvestmentController.InvestMinDelayNotElapsed.selector);
     vm.prank(keeper);

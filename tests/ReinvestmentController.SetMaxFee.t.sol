@@ -25,14 +25,14 @@ contract ReinvestmentControllerSetMaxFeeTest is ReinvestmentControllerTestBase {
     vm.prank(admin);
     controller.setMaxFee(NEW_MAX_FEE);
 
-    assertEq(controller.maxFee(), NEW_MAX_FEE);
+    assertEq(controller.getMaxFee(), NEW_MAX_FEE);
   }
 
   function test_setMaxFee(uint256 maxFee_) public {
     vm.prank(admin);
     controller.setMaxFee(maxFee_);
 
-    assertEq(controller.maxFee(), maxFee_);
+    assertEq(controller.getMaxFee(), maxFee_);
   }
 
   function test_setMaxFee_admitsABurnIntentAtTheNewMaximum() public {
@@ -54,7 +54,7 @@ contract ReinvestmentControllerSetMaxFeeTest is ReinvestmentControllerTestBase {
     bytes memory intent = _encodeBurnIntent(_defaultTransferSpec(1_000e6), 1);
     (bytes32 digest, bytes memory signature) = _signBurnIntent(keeperPrivateKey, intent);
 
-    assertEq(controller.maxFee(), 0);
+    assertEq(controller.getMaxFee(), 0);
 
     vm.expectRevert(IReinvestmentController.MaxFeeExceeded.selector);
     controller.isValidSignature(digest, signature);

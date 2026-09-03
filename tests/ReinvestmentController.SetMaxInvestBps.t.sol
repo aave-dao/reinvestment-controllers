@@ -15,7 +15,7 @@ contract ReinvestmentControllerSetMaxInvestBpsTest is ReinvestmentControllerTest
     vm.prank(admin);
     controller.setMaxInvestBps(1_000);
 
-    assertEq(controller.maxInvestBps(), 1_000);
+    assertEq(controller.getMaxInvestBps(), 1_000);
   }
 
   function test_setMaxInvestBps(uint256 maxInvestBps_) public {
@@ -24,7 +24,7 @@ contract ReinvestmentControllerSetMaxInvestBpsTest is ReinvestmentControllerTest
     vm.prank(admin);
     controller.setMaxInvestBps(maxInvestBps_);
 
-    assertEq(controller.maxInvestBps(), maxInvestBps_);
+    assertEq(controller.getMaxInvestBps(), maxInvestBps_);
   }
 
   function test_setMaxInvestBps_boundsInvestableAmount() public {

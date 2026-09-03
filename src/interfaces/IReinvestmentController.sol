@@ -266,29 +266,35 @@ interface IReinvestmentController is IERC1271, IAccessControl {
 
   /// @notice Returns the minimum delay between invests
   /// @return The minimum delay (in seconds)
-  function investMinDelay() external view returns (uint256);
+  function getInvestMinDelay() external view returns (uint256);
+
+  /// @notice Returns the timestamp of the most recent invest, or zero if never invested
+  /// @dev The next {invest} is allowed once `getLastInvestTimestamp() + getInvestMinDelay()`
+  /// has been reached
+  /// @return The timestamp at which {invest} was last called
+  function getLastInvestTimestamp() external view returns (uint256);
 
   /// @notice Returns the maximum fee payable to the Gateway operator on a withdrawal
   /// @dev Compared against the `maxFee` field of a burn intent, which bounds what the operator
   /// may charge. The Gateway wallet debits `value + fee`, so the fee is drawn from the invested
   /// balance on top of the amount withdrawn
   /// @return The maximum fee (in absolute terms)
-  function maxFee() external view returns (uint256);
+  function getMaxFee() external view returns (uint256);
 
   /// @notice Returns the maximum amount that can be invested (in absolute terms) at any time
   /// @dev Can be set to zero to sunset ReinvestmentController
   /// @return The amount that can be invested
-  function maxInvest() external view returns (uint256);
+  function getMaxInvest() external view returns (uint256);
 
   /// @notice Returns the maximum amount that can be invested (in BPS) at any time
   /// @return The amount that can be invested (in BPS)
-  function maxInvestBps() external view returns (uint256);
+  function getMaxInvestBps() external view returns (uint256);
 
   /// @notice Returns the minimum amount that must remain uninvested in the Hub
   /// @return The amount that must remain uninvested (in BPS)
-  function bufferBps() external view returns (uint256);
+  function getBufferBps() external view returns (uint256);
 
   /// @notice Returns the timestamp of the most recent pause, or zero if not paused
   /// @return The timestamp at which {pause} was last called
-  function pausedAt() external view returns (uint256);
+  function getPausedAt() external view returns (uint256);
 }

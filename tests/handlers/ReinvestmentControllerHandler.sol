@@ -64,7 +64,7 @@ contract ReinvestmentControllerHandler is CommonBase, StdCheats, StdUtils, Gatew
 
     amount = bound(amount, 1, investable);
 
-    vm.warp(block.timestamp + CONTROLLER.investMinDelay() + 1);
+    vm.warp(block.timestamp + CONTROLLER.getInvestMinDelay() + 1);
     vm.prank(KEEPER);
     CONTROLLER.invest(amount);
 

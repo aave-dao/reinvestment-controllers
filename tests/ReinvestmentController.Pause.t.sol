@@ -15,7 +15,7 @@ contract ReinvestmentControllerPauseTest is ReinvestmentControllerTestBase {
     controller.pause();
 
     assertTrue(controller.paused());
-    assertEq(controller.pausedAt(), block.timestamp);
+    assertEq(controller.getPausedAt(), block.timestamp);
   }
 
   function test_pause(uint256 timestamp) public {
@@ -25,7 +25,7 @@ contract ReinvestmentControllerPauseTest is ReinvestmentControllerTestBase {
     vm.prank(pauser);
     controller.pause();
 
-    assertEq(controller.pausedAt(), timestamp);
+    assertEq(controller.getPausedAt(), timestamp);
   }
 
   function test_pause_byAdmin() public {
@@ -33,7 +33,7 @@ contract ReinvestmentControllerPauseTest is ReinvestmentControllerTestBase {
     controller.pause();
 
     assertTrue(controller.paused());
-    assertEq(controller.pausedAt(), block.timestamp);
+    assertEq(controller.getPausedAt(), block.timestamp);
   }
 
   function test_pause_recordsLatestTimestampAcrossPauseCycles() public {
@@ -48,7 +48,7 @@ contract ReinvestmentControllerPauseTest is ReinvestmentControllerTestBase {
     vm.prank(pauser);
     controller.pause();
 
-    assertEq(controller.pausedAt(), block.timestamp);
+    assertEq(controller.getPausedAt(), block.timestamp);
   }
 
   function test_pause_revertsWith_AccessControlUnauthorizedAccount() public {

@@ -27,11 +27,12 @@ contract ReinvestmentControllerConstructorTest is ReinvestmentControllerTestBase
   }
 
   function test_constructor_leavesImplementationUnconfigured() public view {
-    assertEq(implementation.investMinDelay(), 0);
-    assertEq(implementation.maxInvest(), 0);
-    assertEq(implementation.maxInvestBps(), 0);
-    assertEq(implementation.bufferBps(), 0);
-    assertEq(implementation.pausedAt(), 0);
+    assertEq(implementation.getInvestMinDelay(), 0);
+    assertEq(implementation.getLastInvestTimestamp(), 0);
+    assertEq(implementation.getMaxInvest(), 0);
+    assertEq(implementation.getMaxInvestBps(), 0);
+    assertEq(implementation.getBufferBps(), 0);
+    assertEq(implementation.getPausedAt(), 0);
     assertFalse(implementation.hasRole(implementation.DEFAULT_ADMIN_ROLE(), admin));
   }
 

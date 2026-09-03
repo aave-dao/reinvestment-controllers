@@ -60,8 +60,8 @@ contract ReinvestmentControllerInvariantsTest is ReinvestmentControllerTestBase 
     if (investable == 0) return;
 
     uint256 capLimit = Math.min(
-      controller.maxInvest(),
-      hub.getAddedAssets(assetId).percentMulDown(controller.maxInvestBps())
+      controller.getMaxInvest(),
+      hub.getAddedAssets(assetId).percentMulDown(controller.getMaxInvestBps())
     );
 
     assertLe(hub.getAssetSwept(assetId) + investable, capLimit);
@@ -73,7 +73,7 @@ contract ReinvestmentControllerInvariantsTest is ReinvestmentControllerTestBase 
 
     assertGe(
       hub.getAssetLiquidity(assetId) - investable,
-      hub.getAddedAssets(assetId).percentMulUp(controller.bufferBps())
+      hub.getAddedAssets(assetId).percentMulUp(controller.getBufferBps())
     );
   }
 
@@ -82,7 +82,7 @@ contract ReinvestmentControllerInvariantsTest is ReinvestmentControllerTestBase 
   }
 
   function invariant_pausedAtIsSetExactlyWhilePaused() public view {
-    assertEq(controller.pausedAt() != 0, controller.paused());
+    assertEq(controller.getPausedAt() != 0, controller.paused());
   }
 
   function invariant_withdrawalsOnlyRunWhilePaused() public view {

@@ -15,7 +15,7 @@ contract ReinvestmentControllerSetBufferBpsTest is ReinvestmentControllerTestBas
     vm.prank(admin);
     controller.setBufferBps(2_500);
 
-    assertEq(controller.bufferBps(), 2_500);
+    assertEq(controller.getBufferBps(), 2_500);
   }
 
   function test_setBufferBps(uint256 bufferBps_) public {
@@ -24,14 +24,14 @@ contract ReinvestmentControllerSetBufferBpsTest is ReinvestmentControllerTestBas
     vm.prank(admin);
     controller.setBufferBps(bufferBps_);
 
-    assertEq(controller.bufferBps(), bufferBps_);
+    assertEq(controller.getBufferBps(), bufferBps_);
   }
 
   function test_setBufferBps_atMaximumAllowedValue() public {
     vm.prank(admin);
     controller.setBufferBps(PERCENTAGE_FACTOR - 1);
 
-    assertEq(controller.bufferBps(), PERCENTAGE_FACTOR - 1);
+    assertEq(controller.getBufferBps(), PERCENTAGE_FACTOR - 1);
   }
 
   function test_setBufferBps_shrinksInvestableAmount() public {

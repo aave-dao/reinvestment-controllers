@@ -40,12 +40,13 @@ contract ReinvestmentControllerInitializeTest is ReinvestmentControllerTestBase 
 
     fresh.initialize(admin, INVEST_MIN_DELAY, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
 
-    assertEq(fresh.investMinDelay(), INVEST_MIN_DELAY);
-    assertEq(fresh.maxInvest(), MAX_INVEST);
-    assertEq(fresh.maxInvestBps(), MAX_INVEST_BPS);
-    assertEq(fresh.maxFee(), MAX_FEE);
-    assertEq(fresh.bufferBps(), BUFFER_BPS);
-    assertEq(fresh.pausedAt(), 0);
+    assertEq(fresh.getInvestMinDelay(), INVEST_MIN_DELAY);
+    assertEq(fresh.getLastInvestTimestamp(), 0);
+    assertEq(fresh.getMaxInvest(), MAX_INVEST);
+    assertEq(fresh.getMaxInvestBps(), MAX_INVEST_BPS);
+    assertEq(fresh.getMaxFee(), MAX_FEE);
+    assertEq(fresh.getBufferBps(), BUFFER_BPS);
+    assertEq(fresh.getPausedAt(), 0);
     assertFalse(fresh.paused());
 
     assertTrue(fresh.hasRole(fresh.DEFAULT_ADMIN_ROLE(), admin));
@@ -70,11 +71,11 @@ contract ReinvestmentControllerInitializeTest is ReinvestmentControllerTestBase 
 
     fresh.initialize(admin, investMinDelay_, maxInvest_, maxInvestBps_, maxFee_, bufferBps_);
 
-    assertEq(fresh.investMinDelay(), investMinDelay_);
-    assertEq(fresh.maxInvest(), maxInvest_);
-    assertEq(fresh.maxInvestBps(), maxInvestBps_);
-    assertEq(fresh.maxFee(), maxFee_);
-    assertEq(fresh.bufferBps(), bufferBps_);
+    assertEq(fresh.getInvestMinDelay(), investMinDelay_);
+    assertEq(fresh.getMaxInvest(), maxInvest_);
+    assertEq(fresh.getMaxInvestBps(), maxInvestBps_);
+    assertEq(fresh.getMaxFee(), maxFee_);
+    assertEq(fresh.getBufferBps(), bufferBps_);
   }
 
   function test_initialize_grantsEveryRoleToAdminOnly() public {
@@ -98,7 +99,7 @@ contract ReinvestmentControllerInitializeTest is ReinvestmentControllerTestBase 
   function test_initialize_allowsZeroMaxInvest() public {
     fresh.initialize(admin, INVEST_MIN_DELAY, 0, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
 
-    assertEq(fresh.maxInvest(), 0);
+    assertEq(fresh.getMaxInvest(), 0);
     assertEq(fresh.getInvestableAmount(), 0);
   }
 

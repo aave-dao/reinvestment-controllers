@@ -15,7 +15,7 @@ contract ReinvestmentControllerSetInvestMinDelayTest is ReinvestmentControllerTe
     vm.prank(admin);
     controller.setInvestMinDelay(7 days);
 
-    assertEq(controller.investMinDelay(), 7 days);
+    assertEq(controller.getInvestMinDelay(), 7 days);
   }
 
   function test_setInvestMinDelay(uint256 investMinDelay_) public {
@@ -24,7 +24,7 @@ contract ReinvestmentControllerSetInvestMinDelayTest is ReinvestmentControllerTe
     vm.prank(admin);
     controller.setInvestMinDelay(investMinDelay_);
 
-    assertEq(controller.investMinDelay(), investMinDelay_);
+    assertEq(controller.getInvestMinDelay(), investMinDelay_);
   }
 
   function test_setInvestMinDelay_appliesToTheNextInvest() public {

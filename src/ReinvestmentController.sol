@@ -53,26 +53,39 @@ contract ReinvestmentController is
   /// @inheritdoc IReinvestmentController
   uint256 public immutable ASSET_ID;
 
-  /// @dev Minimum time that must elapse between invests (in seconds)
-  uint256 private _investMinDelay;
+  /// @custom:storage-location erc7201:reinvestment.storage.ReinvestmentController
+  struct ReinvestmentControllerStorage {
+    /// @dev Minimum time that must elapse between invests (in seconds)
+    uint256 investMinDelay;
+    /// @dev Timestamp of last invest
+    uint256 lastInvestTimestamp;
+    /// @dev Buffer of uninvested funds on Hub (in BPS)
+    uint256 bufferBps;
+    /// @dev Maximum amount of Hub funds that can be invested (in absolute terms)
+    uint256 maxInvest;
+    /// @dev Maximum amount of Hub funds that can be invested (in BPS)
+    uint256 maxInvestBps;
+    /// @dev Maximum fee payable to the Gateway operator on a withdrawal (in absolute terms)
+    uint256 maxFee;
+    /// @dev Timestamp of the most recent pause, zeroed on unpause
+    uint256 pausedAt;
+  }
 
-  /// @dev Timestamp of last invest
-  uint256 private _lastInvestTimestamp;
+  /// @dev The storage slot for the ReinvestmentController storage struct.
+  bytes32 private constant NAMESPACE_SLOT =
+    // keccak256(abi.encode(uint256(keccak256("reinvestment.storage.ReinvestmentController")) - 1)) & ~bytes32(uint256(0xff))
+    0x65dc087072dd8c0d5c42256b2a3653a05a0be68d693649cbc5ae4d5c285c5d00;
 
-  /// @dev Buffer of uninvested funds on Hub (in BPS)
-  uint256 private _bufferBps;
-
-  /// @dev Maximum amount of Hub funds that can be invested (in absolute terms)
-  uint256 private _maxInvest;
-
-  /// @dev Maximum amount of Hub funds that can be invested (in BPS)
-  uint256 private _maxInvestBps;
-
-  /// @dev Maximum fee payable to the Gateway operator on a withdrawal (in absolute terms)
-  uint256 private _maxFee;
-
-  /// @dev Timestamp of the most recent pause, zeroed on unpause
-  uint256 private _pausedAt;
+  /// @dev Loads the ReinvestmentController storage struct.
+  function _getReinvestmentControllerStorage()
+    private
+    pure
+    returns (ReinvestmentControllerStorage storage $)
+  {
+    assembly ('memory-safe') {
+      $.slot := NAMESPACE_SLOT
+    }
+  }
 
   /// @dev Sets the immutable protocol addresses and locks the implementation. The
   /// resulting contract is inert until {initialize} is called on a proxy in front of it.
@@ -125,11 +138,16 @@ contract ReinvestmentController is
 
   /// @inheritdoc IReinvestmentController
   function invest(uint256 amount) external onlyRole(KEEPER_ROLE) whenNotPaused {
-    require(block.timestamp >= _lastInvestTimestamp + _investMinDelay, InvestMinDelayNotElapsed());
+    ReinvestmentControllerStorage storage $ = _getReinvestmentControllerStorage();
+
+    require(
+      block.timestamp >= $.lastInvestTimestamp + $.investMinDelay,
+      InvestMinDelayNotElapsed()
+    );
     require(amount > 0, InvalidAmount());
     require(amount <= _getInvestableAmount(), MaximumInvestAmountExceeded());
 
-    _lastInvestTimestamp = block.timestamp;
+    $.lastInvestTimestamp = block.timestamp;
 
     HUB.sweep(ASSET_ID, amount);
     USDC.forceApprove(address(GATEWAY_WALLET), amount);
@@ -146,7 +164,7 @@ contract ReinvestmentController is
   ) external onlyRole(KEEPER_ROLE) whenNotPaused {
     require(amount > 0, InvalidAmount());
 
-    uint256 fee = _maxFee;
+    uint256 fee = _getReinvestmentControllerStorage().maxFee;
     uint256 total = amount + fee;
     require(total <= HUB.getAssetSwept(ASSET_ID), InsufficientLiquidity());
 
@@ -196,7 +214,7 @@ contract ReinvestmentController is
 
   /// @inheritdoc IReinvestmentController
   function pause() external onlyRole(PAUSER_ROLE) {
-    _pausedAt = block.timestamp;
+    _getReinvestmentControllerStorage().pausedAt = block.timestamp;
     _pause();
   }
 
@@ -207,7 +225,7 @@ contract ReinvestmentController is
       WithdrawalInProcess()
     );
 
-    _pausedAt = 0;
+    _getReinvestmentControllerStorage().pausedAt = 0;
     _unpause();
   }
 
@@ -256,32 +274,38 @@ contract ReinvestmentController is
   }
 
   /// @inheritdoc IReinvestmentController
-  function investMinDelay() external view returns (uint256) {
-    return _investMinDelay;
+  function getInvestMinDelay() external view returns (uint256) {
+    return _getReinvestmentControllerStorage().investMinDelay;
   }
 
   /// @inheritdoc IReinvestmentController
-  function maxFee() external view returns (uint256) {
-    return _maxFee;
+  function getLastInvestTimestamp() external view returns (uint256) {
+    return _getReinvestmentControllerStorage().lastInvestTimestamp;
   }
 
   /// @inheritdoc IReinvestmentController
-  function maxInvest() external view returns (uint256) {
-    return _maxInvest;
+  function getMaxFee() external view returns (uint256) {
+    return _getReinvestmentControllerStorage().maxFee;
   }
 
   /// @inheritdoc IReinvestmentController
-  function maxInvestBps() external view returns (uint256) {
-    return _maxInvestBps;
-  }
-
-  function bufferBps() external view returns (uint256) {
-    return _bufferBps;
+  function getMaxInvest() external view returns (uint256) {
+    return _getReinvestmentControllerStorage().maxInvest;
   }
 
   /// @inheritdoc IReinvestmentController
-  function pausedAt() external view returns (uint256) {
-    return _pausedAt;
+  function getMaxInvestBps() external view returns (uint256) {
+    return _getReinvestmentControllerStorage().maxInvestBps;
+  }
+
+  /// @inheritdoc IReinvestmentController
+  function getBufferBps() external view returns (uint256) {
+    return _getReinvestmentControllerStorage().bufferBps;
+  }
+
+  /// @inheritdoc IReinvestmentController
+  function getPausedAt() external view returns (uint256) {
+    return _getReinvestmentControllerStorage().pausedAt;
   }
 
   /// @inheritdoc IReinvestmentController
@@ -311,8 +335,10 @@ contract ReinvestmentController is
   function _setInvestMinDelay(uint256 investMinDelay_) internal {
     require(investMinDelay_ > 0, InvalidAmount());
 
-    uint256 oldInvestMinDelay = _investMinDelay;
-    _investMinDelay = investMinDelay_;
+    ReinvestmentControllerStorage storage $ = _getReinvestmentControllerStorage();
+
+    uint256 oldInvestMinDelay = $.investMinDelay;
+    $.investMinDelay = investMinDelay_;
     emit SetInvestMinDelay(oldInvestMinDelay, investMinDelay_);
   }
 
@@ -321,8 +347,10 @@ contract ReinvestmentController is
   function _setBufferBps(uint256 buffer) internal {
     require(buffer > 0 && buffer < PercentageMath.PERCENTAGE_FACTOR, InvalidAmount());
 
-    uint256 oldBufferBps = _bufferBps;
-    _bufferBps = buffer;
+    ReinvestmentControllerStorage storage $ = _getReinvestmentControllerStorage();
+
+    uint256 oldBufferBps = $.bufferBps;
+    $.bufferBps = buffer;
     emit SetBufferBps(oldBufferBps, buffer);
   }
 
@@ -330,8 +358,10 @@ contract ReinvestmentController is
   /// Can be set to 0 to reject any fee-bearing withdrawal
   /// @param maxFee_ The new maximum fee (in absolute terms)
   function _setMaxFee(uint256 maxFee_) internal {
-    uint256 oldMaxFee = _maxFee;
-    _maxFee = maxFee_;
+    ReinvestmentControllerStorage storage $ = _getReinvestmentControllerStorage();
+
+    uint256 oldMaxFee = $.maxFee;
+    $.maxFee = maxFee_;
     emit SetMaxFee(oldMaxFee, maxFee_);
   }
 
@@ -339,8 +369,10 @@ contract ReinvestmentController is
   /// Can be set to 0 to sunset ReinvestmentController
   /// @param maxAmount The new maximum amount (in absolute terms)
   function _setMaxInvest(uint256 maxAmount) internal {
-    uint256 oldMaxInvest = _maxInvest;
-    _maxInvest = maxAmount;
+    ReinvestmentControllerStorage storage $ = _getReinvestmentControllerStorage();
+
+    uint256 oldMaxInvest = $.maxInvest;
+    $.maxInvest = maxAmount;
     emit SetMaxInvest(oldMaxInvest, maxAmount);
   }
 
@@ -349,8 +381,10 @@ contract ReinvestmentController is
   function _setMaxInvestBps(uint256 maxBps) internal {
     require(maxBps > 0 && maxBps < PercentageMath.PERCENTAGE_FACTOR, InvalidAmount());
 
-    uint256 oldMaxInvestBps = _maxInvestBps;
-    _maxInvestBps = maxBps;
+    ReinvestmentControllerStorage storage $ = _getReinvestmentControllerStorage();
+
+    uint256 oldMaxInvestBps = $.maxInvestBps;
+    $.maxInvestBps = maxBps;
     emit SetMaxInvestBps(oldMaxInvestBps, maxBps);
   }
 
@@ -359,12 +393,13 @@ contract ReinvestmentController is
     uint256 supplied = HUB.getAddedAssets(ASSET_ID);
     uint256 idle = HUB.getAssetLiquidity(ASSET_ID);
     uint256 swept = HUB.getAssetSwept(ASSET_ID);
-    uint256 buffer = supplied.percentMulUp(_bufferBps);
+    ReinvestmentControllerStorage storage $ = _getReinvestmentControllerStorage();
+    uint256 buffer = supplied.percentMulUp($.bufferBps);
 
     if (idle <= buffer) return 0;
 
     uint256 freeIdle = idle - buffer;
-    uint256 capLimit = Math.min(_maxInvest, supplied.percentMulDown(_maxInvestBps));
+    uint256 capLimit = Math.min($.maxInvest, supplied.percentMulDown($.maxInvestBps));
     uint256 capRoom = capLimit > swept ? capLimit - swept : 0;
 
     return Math.min(freeIdle, capRoom);
@@ -394,7 +429,7 @@ contract ReinvestmentController is
     _validateTransferSpec(address(USDC), spec);
 
     uint256 intentMaxFee = BurnIntentLib.getMaxFee(intent);
-    require(intentMaxFee <= _maxFee, MaxFeeExceeded());
+    require(intentMaxFee <= _getReinvestmentControllerStorage().maxFee, MaxFeeExceeded());
 
     require(
       spec.getValue() + intentMaxFee <= HUB.getAssetSwept(ASSET_ID),

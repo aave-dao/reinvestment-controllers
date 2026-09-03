@@ -15,7 +15,7 @@ contract ReinvestmentControllerSetMaxInvestTest is ReinvestmentControllerTestBas
     vm.prank(admin);
     controller.setMaxInvest(1_000e6);
 
-    assertEq(controller.maxInvest(), 1_000e6);
+    assertEq(controller.getMaxInvest(), 1_000e6);
     assertEq(controller.getInvestableAmount(), 1_000e6);
   }
 
@@ -23,14 +23,14 @@ contract ReinvestmentControllerSetMaxInvestTest is ReinvestmentControllerTestBas
     vm.prank(admin);
     controller.setMaxInvest(maxInvest_);
 
-    assertEq(controller.maxInvest(), maxInvest_);
+    assertEq(controller.getMaxInvest(), maxInvest_);
   }
 
   function test_setMaxInvest_zeroSunsetsController() public {
     vm.prank(admin);
     controller.setMaxInvest(0);
 
-    assertEq(controller.maxInvest(), 0);
+    assertEq(controller.getMaxInvest(), 0);
     assertEq(controller.getInvestableAmount(), 0);
   }
 

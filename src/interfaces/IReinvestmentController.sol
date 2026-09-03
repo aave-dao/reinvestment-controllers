@@ -187,11 +187,15 @@ interface IReinvestmentController is IERC1271, IAccessControl {
 
   /// @notice Sets the maximum fee that can be paid to the Gateway operator on a withdrawal
   /// Can be set to 0 to reject any fee-bearing withdrawal
-  /// @dev Pause and let outstanding intents settle before lowering. {isValidSignature} checks
-  /// the cap at signing time, but a signed intent stays valid at the Gateway afterwards, so a
-  /// lower cap makes {divest} pre-pay less than Circle can still charge against an intent
-  /// signed under the old one. {divest} cannot detect this, as an attestation carries no fee
-  /// field. Pausing blocks {isValidSignature}, so no new intent can be signed meanwhile
+  /// @dev To lower the cap: let outstanding intents settle through {divest} first, then pause,
+  /// then lower. That order matters, as {divest} is itself `whenNotPaused`, so pausing first
+  /// blocks the settlement that has to happen. Pausing once drained blocks {isValidSignature},
+  /// so no new intent can be signed under the old cap while the change lands.
+  /// {isValidSignature} checks the cap at signing time, but a signed intent stays valid at the
+  /// Gateway afterwards, so a lower cap makes {divest} pre-pay less than Circle can still
+  /// charge against an intent signed under the old one. {divest} cannot detect this, as an
+  /// attestation carries no fee field. Raising the cap needs none of this: it only makes
+  /// {divest} over-pay, which cannot leave the Hub's `swept` overstated
   /// @param maxFee_ The new maximum fee (in absolute terms)
   function setMaxFee(uint256 maxFee_) external;
 

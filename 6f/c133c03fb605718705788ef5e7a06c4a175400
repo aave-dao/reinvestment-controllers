@@ -1,0 +1,108 @@
+tests/ReinvestmentController.SetLiquidBufferBps.t.sol
+  s_eca17fc6bbad6f::t_b48a45135c6b01 10-11,13,16,18,21-22,25,27,30,32,34,37,39,44,55,58,61,64,67,70,73
+src/ReinvestmentController.sol
+  s_8ac7dd259d64b7::t_90dc032853da6c 409
+  h_89d2da8ff33004 402-404,408,411-413,416-418,421-422
+  s_b39f2a1c91bf36::t_c637eb07cd7b18 64,66,254,371,382-388,392-394,405-406,410,414,419
+  s_30dddd379e31b0::t_c6901a9c4133ff 253
+  s_b39f2a1c91bf36::t_457f3f55d8e13e 67,119,134,148,297-298
+  s_eca17fc6bbad6f::t_9ab776e2195d76 65,118,133,248-249,292-293,373-374,377-379,415
+  s_eca17fc6bbad6f::t_b48a45135c6b01 62-63,121,136,238-239,302-303,345-351,355-357,407
+tests/handlers/ReinvestmentControllerHandler.sol
+  s_b39f2a1c91bf36::t_457f3f55d8e13e 141,143
+  s_eca17fc6bbad6f::t_b48a45135c6b01 131,133
+  s_eca17fc6bbad6f::t_9ab776e2195d76 136,138
+tests/ReinvestmentController.Initialize.t.sol
+  s_eca17fc6bbad6f::t_9ab776e2195d76 33,41-46,48,52,69,75,89,127
+  s_eca17fc6bbad6f::t_24364fe5c537a8 130,188,197,205,217
+  s_b39f2a1c91bf36::t_457f3f55d8e13e 35,53,70,76,90,166,171,183,206,218
+  s_30dddd379e31b0::t_c6901a9c4133ff 96-103,111-118,136-143,151-158,173-180,225-232,235-242,247-254
+  s_eca17fc6bbad6f::t_b48a45135c6b01 39,47,55,72,77,79-86,92,195,200,212
+  s_eca17fc6bbad6f::t_780c9fd14f32b9 128,163,168,191
+tests/ReinvestmentController.Fork.t.sol
+  s_eca17fc6bbad6f::t_9ab776e2195d76 45
+  s_eca17fc6bbad6f::t_b48a45135c6b01 47,76-83
+  s_b39f2a1c91bf36::t_457f3f55d8e13e 46,131,134
+tests/ReinvestmentController.Invest.t.sol
+  s_b39f2a1c91bf36::t_457f3f55d8e13e 63,243-244,253,261,266,272
+  s_eca17fc6bbad6f::t_b48a45135c6b01 61,258
+  s_eca17fc6bbad6f::t_9ab776e2195d76 251
+  s_eca17fc6bbad6f::t_931255a024e1ba 249
+tests/ReinvestmentController.Constructor.t.sol
+  s_eca17fc6bbad6f::t_9ab776e2195d76 32,58
+  s_b39f2a1c91bf36::t_457f3f55d8e13e 33,59
+  s_eca17fc6bbad6f::t_b48a45135c6b01 34,61
+tests/ReinvestmentController.Storage.t.sol
+  s_eca17fc6bbad6f::t_9ab776e2195d76 13,37
+  s_eca17fc6bbad6f::t_b48a45135c6b01 12,36
+  s_b39f2a1c91bf36::t_457f3f55d8e13e 14,38
+tests/ReinvestmentController.GetInvestableAmount.t.sol
+  s_eca17fc6bbad6f::t_b48a45135c6b01 17,24,31,36-41,47,58,64,70,147,157
+  s_eca17fc6bbad6f::t_9ab776e2195d76 18,25,32,43,84,96,98
+  s_b39f2a1c91bf36::t_457f3f55d8e13e 19,26,33,44,91,158
+tests/ReinvestmentController.SetExposureCapAbs.t.sol
+  s_eca17fc6bbad6f::t_9ab776e2195d76 10-11,13,16,18,22,24,26,29,31,33,37,42,51,62
+tests/ReinvestmentController.Base.t.sol
+  s_eca17fc6bbad6f::t_9ab776e2195d76 21
+  s_b39f2a1c91bf36::t_457f3f55d8e13e 22
+  s_eca17fc6bbad6f::t_b48a45135c6b01 23,79-86
+README.md
+  s_b39f2a1c91bf36::t_84f6564b518911 16,18
+  s_eca17fc6bbad6f::t_b48a45135c6b01 17
+tests/ReinvestmentController.Invariants.t.sol
+  s_eca17fc6bbad6f::t_b48a45135c6b01 70,76
+  s_b39f2a1c91bf36::t_457f3f55d8e13e 64
+  s_eca17fc6bbad6f::t_9ab776e2195d76 63
+src/interfaces/IReinvestmentController.sol
+  s_b39f2a1c91bf36::t_c637eb07cd7b18 63,91,96-99,122,202,207-209,288,290,293-294
+  s_eca17fc6bbad6f::t_9ab776e2195d76 92-94,121,128,204-205,291
+  s_eca17fc6bbad6f::t_b48a45135c6b01 101-104,124,131,184-186,299
+  s_b39f2a1c91bf36::t_457f3f55d8e13e 64,129,295
+tests/ReinvestmentController.SetExposureCapBps.t.sol
+  s_b39f2a1c91bf36::t_e418109d13f2ac 10-11,13,16,18,21-22,25,27,30,32,37,48,51,54,57,60,63,66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "6fc133c03fb605718705788ef5e7a06c4a175400",
+  "prompts": {},
+  "humans": {
+    "h_89d2da8ff33004": {
+      "author": "AlbertoCentonze <11707683+AlbertoCentonze@users.noreply.github.com>"
+    }
+  },
+  "sessions": {
+    "s_30dddd379e31b0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0681e-e6e2-7aa0-9047-0e0b02252773",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "AlbertoCentonze <11707683+AlbertoCentonze@users.noreply.github.com>"
+    },
+    "s_8ac7dd259d64b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0680c-0810-7a41-9f22-d6cfba9b9ce2",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "AlbertoCentonze <11707683+AlbertoCentonze@users.noreply.github.com>"
+    },
+    "s_b39f2a1c91bf36": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a06685-3f37-75d0-a283-5dda461f221c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "AlbertoCentonze <11707683+AlbertoCentonze@users.noreply.github.com>"
+    },
+    "s_eca17fc6bbad6f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a066aa-8421-7b93-92dc-62b2bf621d01",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "AlbertoCentonze <11707683+AlbertoCentonze@users.noreply.github.com>"
+    }
+  }
+}

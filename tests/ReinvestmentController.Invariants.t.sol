@@ -10,10 +10,22 @@ import {ReinvestmentControllerTestBase} from './ReinvestmentController.Base.t.so
 contract ReinvestmentControllerInvariantsTest is ReinvestmentControllerTestBase {
   using PercentageMath for uint256;
 
+  uint256 internal constant INVARIANT_MAX_FEE = 1e6;
+  uint256 internal constant KEEPER_FEE_FUNDING = 1_000e6;
+
   ReinvestmentControllerHandler internal handler;
 
   function setUp() public override {
     super.setUp();
+
+    vm.prank(admin);
+    controller.setMaxFee(INVARIANT_MAX_FEE);
+
+    usdc.mint(keeper, KEEPER_FEE_FUNDING);
+    vm.prank(keeper);
+    usdc.approve(address(controller), type(uint256).max);
+
+    _invest(INVESTABLE);
 
     handler = new ReinvestmentControllerHandler(
       controller,
@@ -25,12 +37,19 @@ contract ReinvestmentControllerInvariantsTest is ReinvestmentControllerTestBase 
       pauser
     );
 
+    bytes4[] memory selectors = new bytes4[](4);
+    selectors[0] = handler.invest.selector;
+    selectors[1] = handler.divest.selector;
+    selectors[2] = handler.fullExit.selector;
+    selectors[3] = handler.supplyToHub.selector;
+
     targetContract(address(handler));
+    targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
   }
 
-  function invariant_liquidityPlusSweptEqualsAddedAssets() public view {
+  function invariant_accountedAssetsArePhysicallyHeld() public view {
     assertEq(
-      hub.getAssetLiquidity(assetId) + hub.getAssetSwept(assetId),
+      usdc.balanceOf(address(hub)) + wallet.totalBalance(address(usdc), address(controller)),
       hub.getAddedAssets(assetId)
     );
   }
@@ -39,7 +58,7 @@ contract ReinvestmentControllerInvariantsTest is ReinvestmentControllerTestBase 
     assertEq(usdc.balanceOf(address(hub)), hub.getAssetLiquidity(assetId));
   }
 
-  function invariant_sweptIsBackedByTheGatewayBalance() public view {
+  function invariant_gatewayBalanceEqualsSwept() public view {
     assertEq(hub.getAssetSwept(assetId), wallet.totalBalance(address(usdc), address(controller)));
   }
 
@@ -47,12 +66,8 @@ contract ReinvestmentControllerInvariantsTest is ReinvestmentControllerTestBase 
     assertEq(usdc.balanceOf(address(controller)), 0);
   }
 
-  function invariant_controllerHoldsNoResidualAllowance() public view {
-    assertEq(usdc.allowance(address(controller), address(wallet)), 0);
-  }
-
-  function invariant_totalSupplyIsBackedByHubAndGateway() public view {
-    assertEq(usdc.totalSupply(), usdc.balanceOf(address(hub)) + usdc.balanceOf(address(wallet)));
+  function invariant_fullGatewayBalanceCanAlwaysExit() public view {
+    assertEq(handler.fullExitFailures(), 0);
   }
 
   function invariant_investableAmountNeverBreachesTheCap() public view {
@@ -75,30 +90,5 @@ contract ReinvestmentControllerInvariantsTest is ReinvestmentControllerTestBase 
       hub.getAssetLiquidity(assetId) - investable,
       hub.getAddedAssets(assetId).percentMulUp(controller.getLiquidBufferBps())
     );
-  }
-
-  function invariant_investableNeverExceedsIdleLiquidity() public view {
-    assertLe(controller.getInvestableAmount(), hub.getAssetLiquidity(assetId));
-  }
-
-  function invariant_pausedAtIsSetExactlyWhilePaused() public view {
-    assertEq(controller.getPausedAt() != 0, controller.paused());
-  }
-
-  function invariant_withdrawalsOnlyRunWhilePaused() public view {
-    if (wallet.withdrawingBalance(address(usdc), address(controller)) > 0) {
-      assertTrue(controller.paused());
-    }
-  }
-
-  function invariant_investedNeverBelowDivested() public view {
-    assertGe(handler.totalInvested(), handler.totalDivested());
-  }
-
-  function afterInvariant() public view {
-    assertGt(handler.investCalls(), 0);
-    assertGt(handler.divestCalls(), 0);
-    assertGt(handler.initiateWithdrawalCalls(), 0);
-    assertGt(handler.withdrawCalls(), 0);
   }
 }

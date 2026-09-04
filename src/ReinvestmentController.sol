@@ -59,12 +59,12 @@ contract ReinvestmentController is
     uint256 investMinDelay;
     /// @dev Timestamp of last invest
     uint256 lastInvestTimestamp;
-    /// @dev Buffer of uninvested funds on Hub (in BPS)
-    uint256 bufferBps;
-    /// @dev Maximum amount of Hub funds that can be invested (in absolute terms)
-    uint256 maxInvest;
-    /// @dev Maximum amount of Hub funds that can be invested (in BPS)
-    uint256 maxInvestBps;
+    /// @dev Liquid buffer of uninvested funds on Hub (in BPS)
+    uint256 liquidBufferBps;
+    /// @dev Exposure cap (in absolute terms)
+    uint256 exposureCapAbs;
+    /// @dev Exposure cap (in BPS of supplied assets)
+    uint256 exposureCapBps;
     /// @dev Maximum fee payable to the Gateway operator on a withdrawal (in absolute terms)
     uint256 maxFee;
     /// @dev Timestamp of the most recent pause, zeroed on unpause
@@ -115,10 +115,10 @@ contract ReinvestmentController is
   function initialize(
     address admin,
     uint256 investMinDelay,
-    uint256 maxInvest,
-    uint256 maxInvestBps,
+    uint256 exposureCapAbs,
+    uint256 exposureCapBps,
     uint256 maxFee,
-    uint256 bufferBps
+    uint256 liquidBufferBps
   ) external initializer {
     require(admin != address(0), InvalidZeroAddress());
 
@@ -130,10 +130,10 @@ contract ReinvestmentController is
     _grantRole(PAUSER_ROLE, admin);
 
     _setInvestMinDelay(investMinDelay);
-    _setMaxInvest(maxInvest);
-    _setMaxInvestBps(maxInvestBps);
+    _setExposureCapAbs(exposureCapAbs);
+    _setExposureCapBps(exposureCapBps);
     _setMaxFee(maxFee);
-    _setBufferBps(bufferBps);
+    _setLiquidBufferBps(liquidBufferBps);
   }
 
   /// @inheritdoc IReinvestmentController
@@ -145,7 +145,7 @@ contract ReinvestmentController is
       InvestMinDelayNotElapsed()
     );
     require(amount > 0, InvalidAmount());
-    require(amount <= _getInvestableAmount(), MaximumInvestAmountExceeded());
+    require(amount <= _getInvestableAmount(), ExposureCapExceeded());
 
     $.lastInvestTimestamp = block.timestamp;
 
@@ -235,8 +235,8 @@ contract ReinvestmentController is
   }
 
   /// @inheritdoc IReinvestmentController
-  function setBufferBps(uint256 bufferBps_) external onlyRole(DEFAULT_ADMIN_ROLE) {
-    _setBufferBps(bufferBps_);
+  function setLiquidBufferBps(uint256 liquidBufferBps_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    _setLiquidBufferBps(liquidBufferBps_);
   }
 
   /// @inheritdoc IReinvestmentController
@@ -245,13 +245,13 @@ contract ReinvestmentController is
   }
 
   /// @inheritdoc IReinvestmentController
-  function setMaxInvest(uint256 maxAmount) external onlyRole(DEFAULT_ADMIN_ROLE) {
-    _setMaxInvest(maxAmount);
+  function setExposureCapAbs(uint256 newExposureCapAbs) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    _setExposureCapAbs(newExposureCapAbs);
   }
 
   /// @inheritdoc IReinvestmentController
-  function setMaxInvestBps(uint256 maxBps) external onlyRole(DEFAULT_ADMIN_ROLE) {
-    _setMaxInvestBps(maxBps);
+  function setExposureCapBps(uint256 newExposureCapBps) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    _setExposureCapBps(newExposureCapBps);
   }
 
   /// @inheritdoc IReinvestmentController
@@ -289,18 +289,18 @@ contract ReinvestmentController is
   }
 
   /// @inheritdoc IReinvestmentController
-  function getMaxInvest() external view returns (uint256) {
-    return _getReinvestmentControllerStorage().maxInvest;
+  function getExposureCapAbs() external view returns (uint256) {
+    return _getReinvestmentControllerStorage().exposureCapAbs;
   }
 
   /// @inheritdoc IReinvestmentController
-  function getMaxInvestBps() external view returns (uint256) {
-    return _getReinvestmentControllerStorage().maxInvestBps;
+  function getExposureCapBps() external view returns (uint256) {
+    return _getReinvestmentControllerStorage().exposureCapBps;
   }
 
   /// @inheritdoc IReinvestmentController
-  function getBufferBps() external view returns (uint256) {
-    return _getReinvestmentControllerStorage().bufferBps;
+  function getLiquidBufferBps() external view returns (uint256) {
+    return _getReinvestmentControllerStorage().liquidBufferBps;
   }
 
   /// @inheritdoc IReinvestmentController
@@ -342,16 +342,19 @@ contract ReinvestmentController is
     emit SetInvestMinDelay(oldInvestMinDelay, investMinDelay_);
   }
 
-  /// @dev Sets the minimum amount of buffer that must be left on the Hub uninvested (in BPS)
-  /// @param buffer New buffer amount (in BPS)
-  function _setBufferBps(uint256 buffer) internal {
-    require(buffer > 0 && buffer < PercentageMath.PERCENTAGE_FACTOR, InvalidAmount());
+  /// @dev Sets the liquid buffer that must be left on the Hub uninvested (in BPS)
+  /// @param liquidBufferBps New liquid buffer (in BPS)
+  function _setLiquidBufferBps(uint256 liquidBufferBps) internal {
+    require(
+      liquidBufferBps > 0 && liquidBufferBps < PercentageMath.PERCENTAGE_FACTOR,
+      InvalidAmount()
+    );
 
     ReinvestmentControllerStorage storage $ = _getReinvestmentControllerStorage();
 
-    uint256 oldBufferBps = $.bufferBps;
-    $.bufferBps = buffer;
-    emit SetBufferBps(oldBufferBps, buffer);
+    uint256 oldLiquidBufferBps = $.liquidBufferBps;
+    $.liquidBufferBps = liquidBufferBps;
+    emit SetLiquidBufferBps(oldLiquidBufferBps, liquidBufferBps);
   }
 
   /// @dev Sets the maximum fee payable to the Gateway operator on a withdrawal
@@ -365,44 +368,58 @@ contract ReinvestmentController is
     emit SetMaxFee(oldMaxFee, maxFee_);
   }
 
-  /// @dev Sets the maximum amount that can be invested (in absolute terms)
+  /// @dev Sets the exposure cap (in absolute terms)
   /// Can be set to 0 to sunset ReinvestmentController
-  /// @param maxAmount The new maximum amount (in absolute terms)
-  function _setMaxInvest(uint256 maxAmount) internal {
+  /// @param newExposureCapAbs The new exposure cap
+  function _setExposureCapAbs(uint256 newExposureCapAbs) internal {
     ReinvestmentControllerStorage storage $ = _getReinvestmentControllerStorage();
 
-    uint256 oldMaxInvest = $.maxInvest;
-    $.maxInvest = maxAmount;
-    emit SetMaxInvest(oldMaxInvest, maxAmount);
+    uint256 oldExposureCapAbs = $.exposureCapAbs;
+    $.exposureCapAbs = newExposureCapAbs;
+    emit SetExposureCapAbs(oldExposureCapAbs, newExposureCapAbs);
   }
 
-  /// @dev Sets the maximum amount that can be invested (in BPS)
-  /// @dev maxBps New maximum amount (in BPS)
-  function _setMaxInvestBps(uint256 maxBps) internal {
-    require(maxBps > 0 && maxBps < PercentageMath.PERCENTAGE_FACTOR, InvalidAmount());
+  /// @dev Sets the exposure cap (in BPS of supplied assets)
+  /// @param newExposureCapBps The new exposure cap
+  function _setExposureCapBps(uint256 newExposureCapBps) internal {
+    require(
+      newExposureCapBps > 0 && newExposureCapBps < PercentageMath.PERCENTAGE_FACTOR,
+      InvalidAmount()
+    );
 
     ReinvestmentControllerStorage storage $ = _getReinvestmentControllerStorage();
 
-    uint256 oldMaxInvestBps = $.maxInvestBps;
-    $.maxInvestBps = maxBps;
-    emit SetMaxInvestBps(oldMaxInvestBps, maxBps);
+    uint256 oldExposureCapBps = $.exposureCapBps;
+    $.exposureCapBps = newExposureCapBps;
+    emit SetExposureCapBps(oldExposureCapBps, newExposureCapBps);
   }
 
   /// @dev Calculates the amount currently available to invest
   function _getInvestableAmount() internal view returns (uint256) {
     uint256 supplied = HUB.getAddedAssets(ASSET_ID);
-    uint256 idle = HUB.getAssetLiquidity(ASSET_ID);
-    uint256 swept = HUB.getAssetSwept(ASSET_ID);
     ReinvestmentControllerStorage storage $ = _getReinvestmentControllerStorage();
-    uint256 buffer = supplied.percentMulUp($.bufferBps);
 
-    if (idle <= buffer) return 0;
+    // This is the amount of idle assets on Hub that can be
+    // invested without violating the liquid buffer (percentage
+    // of supplied assets that must always remain idle on Hub).
+    uint256 freeIdle;
+    {
+      uint256 liquidBuffer = supplied.percentMulUp($.liquidBufferBps);
+      uint256 idle = HUB.getAssetLiquidity(ASSET_ID);
+      freeIdle = Math.saturatingSub(idle, liquidBuffer);
+    }
+    // This is the maximum amount that can be invested without
+    // exceeding the exposure cap.
+    uint256 residualExposureCap;
+    {
+      uint256 exposureCapRel = supplied.percentMulDown($.exposureCapBps);
+      uint256 cap = Math.min($.exposureCapAbs, exposureCapRel);
+      uint256 swept = HUB.getAssetSwept(ASSET_ID);
+      residualExposureCap = Math.saturatingSub(cap, swept);
+    }
 
-    uint256 freeIdle = idle - buffer;
-    uint256 capLimit = Math.min($.maxInvest, supplied.percentMulDown($.maxInvestBps));
-    uint256 capRoom = capLimit > swept ? capLimit - swept : 0;
-
-    return Math.min(freeIdle, capRoom);
+    // We conservatively return the minimum of the two amounts.
+    return Math.min(freeIdle, residualExposureCap);
   }
 
   /// @dev Validates an attestation that was signed to withdraw funds

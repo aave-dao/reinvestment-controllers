@@ -42,9 +42,9 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
   address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
 
   uint256 internal constant INVEST_MIN_DELAY = 1 days;
-  uint256 internal constant MAX_INVEST = 10_000_000e6;
-  uint256 internal constant MAX_INVEST_BPS = 8_000;
-  uint256 internal constant BUFFER_BPS = 1_000;
+  uint256 internal constant EXPOSURE_CAP_ABS = 10_000_000e6;
+  uint256 internal constant EXPOSURE_CAP_BPS = 8_000;
+  uint256 internal constant LIQUID_BUFFER_BPS = 1_000;
   uint256 internal constant MAX_FEE = 1e6;
   uint256 internal constant FEE_FUNDING = 1_000e6;
 
@@ -73,7 +73,14 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
           proxyAdminOwner,
           abi.encodeCall(
             IReinvestmentController.initialize,
-            (admin, INVEST_MIN_DELAY, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS)
+            (
+              admin,
+              INVEST_MIN_DELAY,
+              EXPOSURE_CAP_ABS,
+              EXPOSURE_CAP_BPS,
+              MAX_FEE,
+              LIQUID_BUFFER_BPS
+            )
           )
         )
       )
@@ -121,10 +128,10 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
     assertEq(IGatewayWallet(GATEWAY_WALLET).withdrawingBalance(USDC, address(controller)), 0);
   }
 
-  function test_invest_revertsWith_MaximumInvestAmountExceeded() public {
+  function test_invest_revertsWith_ExposureCapExceeded() public {
     uint256 amount = controller.getInvestableAmount() + 1;
 
-    vm.expectRevert(IReinvestmentController.MaximumInvestAmountExceeded.selector);
+    vm.expectRevert(IReinvestmentController.ExposureCapExceeded.selector);
     vm.prank(keeper);
     controller.invest(amount);
   }

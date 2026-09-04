@@ -60,20 +60,20 @@ contract ReinvestmentControllerInvariantsTest is ReinvestmentControllerTestBase 
     if (investable == 0) return;
 
     uint256 capLimit = Math.min(
-      controller.getMaxInvest(),
-      hub.getAddedAssets(assetId).percentMulDown(controller.getMaxInvestBps())
+      controller.getExposureCapAbs(),
+      hub.getAddedAssets(assetId).percentMulDown(controller.getExposureCapBps())
     );
 
     assertLe(hub.getAssetSwept(assetId) + investable, capLimit);
   }
 
-  function invariant_investableAmountNeverBreachesTheBuffer() public view {
+  function invariant_investableAmountNeverBreachesTheLiquidBuffer() public view {
     uint256 investable = controller.getInvestableAmount();
     if (investable == 0) return;
 
     assertGe(
       hub.getAssetLiquidity(assetId) - investable,
-      hub.getAddedAssets(assetId).percentMulUp(controller.getBufferBps())
+      hub.getAddedAssets(assetId).percentMulUp(controller.getLiquidBufferBps())
     );
   }
 

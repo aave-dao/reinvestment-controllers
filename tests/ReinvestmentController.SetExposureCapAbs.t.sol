@@ -7,39 +7,39 @@ import {IReinvestmentController} from '../src/interfaces/IReinvestmentController
 
 import {ReinvestmentControllerTestBase} from './ReinvestmentController.Base.t.sol';
 
-contract ReinvestmentControllerSetMaxInvestTest is ReinvestmentControllerTestBase {
-  function test_setMaxInvest() public {
+contract ReinvestmentControllerSetExposureCapAbsTest is ReinvestmentControllerTestBase {
+  function test_setExposureCapAbs() public {
     vm.expectEmit(address(controller));
-    emit IReinvestmentController.SetMaxInvest(MAX_INVEST, 1_000e6);
+    emit IReinvestmentController.SetExposureCapAbs(EXPOSURE_CAP_ABS, 1_000e6);
 
     vm.prank(admin);
-    controller.setMaxInvest(1_000e6);
+    controller.setExposureCapAbs(1_000e6);
 
-    assertEq(controller.getMaxInvest(), 1_000e6);
+    assertEq(controller.getExposureCapAbs(), 1_000e6);
     assertEq(controller.getInvestableAmount(), 1_000e6);
   }
 
-  function test_setMaxInvest(uint256 maxInvest_) public {
+  function test_setExposureCapAbs(uint256 exposureCapAbs_) public {
     vm.prank(admin);
-    controller.setMaxInvest(maxInvest_);
+    controller.setExposureCapAbs(exposureCapAbs_);
 
-    assertEq(controller.getMaxInvest(), maxInvest_);
+    assertEq(controller.getExposureCapAbs(), exposureCapAbs_);
   }
 
-  function test_setMaxInvest_zeroSunsetsController() public {
+  function test_setExposureCapAbs_zeroSunsetsController() public {
     vm.prank(admin);
-    controller.setMaxInvest(0);
+    controller.setExposureCapAbs(0);
 
-    assertEq(controller.getMaxInvest(), 0);
+    assertEq(controller.getExposureCapAbs(), 0);
     assertEq(controller.getInvestableAmount(), 0);
   }
 
-  function test_setMaxInvest_stillAllowsDivest() public {
+  function test_setExposureCapAbs_stillAllowsDivest() public {
     vm.prank(keeper);
     controller.invest(100_000e6);
 
     vm.prank(admin);
-    controller.setMaxInvest(0);
+    controller.setExposureCapAbs(0);
 
     vm.prank(keeper);
     controller.divest(100_000e6, _encodeAttestation(_defaultTransferSpec(100_000e6)), hex'1234');
@@ -48,7 +48,7 @@ contract ReinvestmentControllerSetMaxInvestTest is ReinvestmentControllerTestBas
     assertEq(hub.getAssetLiquidity(assetId), SUPPLIED);
   }
 
-  function test_setMaxInvest_revertsWith_AccessControlUnauthorizedAccount() public {
+  function test_setExposureCapAbs_revertsWith_AccessControlUnauthorizedAccount() public {
     bytes32 adminRole = controller.DEFAULT_ADMIN_ROLE();
 
     vm.expectRevert(
@@ -59,6 +59,6 @@ contract ReinvestmentControllerSetMaxInvestTest is ReinvestmentControllerTestBas
       )
     );
     vm.prank(keeper);
-    controller.setMaxInvest(1_000e6);
+    controller.setExposureCapAbs(1_000e6);
   }
 }

@@ -13,8 +13,9 @@ implementation; limits and roles are set in `initialize`.
 - `initiateWithdrawal` / `withdraw` — on-chain exit path, subject to the Gateway's delay
 - `isValidSignature` — ERC-1271, authorises burn intents signed by a `KEEPER_ROLE` holder
 
-How much can be invested is bounded by `maxInvest`, `maxInvestBps` and a `bufferBps` of Hub
-liquidity that must stay idle. Set `maxInvest` to zero to sunset.
+How much can be invested is bounded by the absolute exposure cap, the exposure cap in BPS of
+supplied assets, and a liquid buffer of Hub liquidity that must stay idle. Set the absolute exposure
+cap to zero to sunset.
 
 ## Fee accounting
 

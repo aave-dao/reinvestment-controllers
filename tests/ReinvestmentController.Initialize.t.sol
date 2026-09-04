@@ -30,22 +30,29 @@ contract ReinvestmentControllerInitializeTest is ReinvestmentControllerTestBase 
     vm.expectEmit(address(fresh));
     emit IReinvestmentController.SetInvestMinDelay(0, INVEST_MIN_DELAY);
     vm.expectEmit(address(fresh));
-    emit IReinvestmentController.SetMaxInvest(0, MAX_INVEST);
+    emit IReinvestmentController.SetExposureCapAbs(0, EXPOSURE_CAP_ABS);
     vm.expectEmit(address(fresh));
-    emit IReinvestmentController.SetMaxInvestBps(0, MAX_INVEST_BPS);
+    emit IReinvestmentController.SetExposureCapBps(0, EXPOSURE_CAP_BPS);
     vm.expectEmit(address(fresh));
     emit IReinvestmentController.SetMaxFee(0, MAX_FEE);
     vm.expectEmit(address(fresh));
-    emit IReinvestmentController.SetBufferBps(0, BUFFER_BPS);
+    emit IReinvestmentController.SetLiquidBufferBps(0, LIQUID_BUFFER_BPS);
 
-    fresh.initialize(admin, INVEST_MIN_DELAY, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
+    fresh.initialize(
+      admin,
+      INVEST_MIN_DELAY,
+      EXPOSURE_CAP_ABS,
+      EXPOSURE_CAP_BPS,
+      MAX_FEE,
+      LIQUID_BUFFER_BPS
+    );
 
     assertEq(fresh.getInvestMinDelay(), INVEST_MIN_DELAY);
     assertEq(fresh.getLastInvestTimestamp(), 0);
-    assertEq(fresh.getMaxInvest(), MAX_INVEST);
-    assertEq(fresh.getMaxInvestBps(), MAX_INVEST_BPS);
+    assertEq(fresh.getExposureCapAbs(), EXPOSURE_CAP_ABS);
+    assertEq(fresh.getExposureCapBps(), EXPOSURE_CAP_BPS);
     assertEq(fresh.getMaxFee(), MAX_FEE);
-    assertEq(fresh.getBufferBps(), BUFFER_BPS);
+    assertEq(fresh.getLiquidBufferBps(), LIQUID_BUFFER_BPS);
     assertEq(fresh.getPausedAt(), 0);
     assertFalse(fresh.paused());
 
@@ -59,27 +66,41 @@ contract ReinvestmentControllerInitializeTest is ReinvestmentControllerTestBase 
 
   function test_initialize(
     uint256 investMinDelay_,
-    uint256 maxInvest_,
-    uint256 maxInvestBps_,
+    uint256 exposureCapAbs_,
+    uint256 exposureCapBps_,
     uint256 maxFee_,
-    uint256 bufferBps_
+    uint256 liquidBufferBps_
   ) public {
     investMinDelay_ = bound(investMinDelay_, 1, 365 days);
-    maxInvest_ = bound(maxInvest_, 0, type(uint128).max);
-    maxInvestBps_ = bound(maxInvestBps_, 1, PERCENTAGE_FACTOR - 1);
-    bufferBps_ = bound(bufferBps_, 1, PERCENTAGE_FACTOR - 1);
+    exposureCapAbs_ = bound(exposureCapAbs_, 0, type(uint128).max);
+    exposureCapBps_ = bound(exposureCapBps_, 1, PERCENTAGE_FACTOR - 1);
+    liquidBufferBps_ = bound(liquidBufferBps_, 1, PERCENTAGE_FACTOR - 1);
 
-    fresh.initialize(admin, investMinDelay_, maxInvest_, maxInvestBps_, maxFee_, bufferBps_);
+    fresh.initialize(
+      admin,
+      investMinDelay_,
+      exposureCapAbs_,
+      exposureCapBps_,
+      maxFee_,
+      liquidBufferBps_
+    );
 
     assertEq(fresh.getInvestMinDelay(), investMinDelay_);
-    assertEq(fresh.getMaxInvest(), maxInvest_);
-    assertEq(fresh.getMaxInvestBps(), maxInvestBps_);
+    assertEq(fresh.getExposureCapAbs(), exposureCapAbs_);
+    assertEq(fresh.getExposureCapBps(), exposureCapBps_);
     assertEq(fresh.getMaxFee(), maxFee_);
-    assertEq(fresh.getBufferBps(), bufferBps_);
+    assertEq(fresh.getLiquidBufferBps(), liquidBufferBps_);
   }
 
   function test_initialize_grantsEveryRoleToAdminOnly() public {
-    fresh.initialize(admin, INVEST_MIN_DELAY, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
+    fresh.initialize(
+      admin,
+      INVEST_MIN_DELAY,
+      EXPOSURE_CAP_ABS,
+      EXPOSURE_CAP_BPS,
+      MAX_FEE,
+      LIQUID_BUFFER_BPS
+    );
 
     assertFalse(fresh.hasRole(fresh.DEFAULT_ADMIN_ROLE(), alice));
     assertFalse(fresh.hasRole(fresh.KEEPER_ROLE(), alice));
@@ -87,7 +108,14 @@ contract ReinvestmentControllerInitializeTest is ReinvestmentControllerTestBase 
   }
 
   function test_initialize_leavesImmutablesUntouched() public {
-    fresh.initialize(admin, INVEST_MIN_DELAY, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
+    fresh.initialize(
+      admin,
+      INVEST_MIN_DELAY,
+      EXPOSURE_CAP_ABS,
+      EXPOSURE_CAP_BPS,
+      MAX_FEE,
+      LIQUID_BUFFER_BPS
+    );
 
     assertEq(address(fresh.GATEWAY_WALLET()), address(wallet));
     assertEq(address(fresh.GATEWAY_MINTER()), address(minter));
@@ -96,16 +124,23 @@ contract ReinvestmentControllerInitializeTest is ReinvestmentControllerTestBase 
     assertEq(fresh.ASSET_ID(), assetId);
   }
 
-  function test_initialize_allowsZeroMaxInvest() public {
-    fresh.initialize(admin, INVEST_MIN_DELAY, 0, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
+  function test_initialize_allowsZeroExposureCapAbs() public {
+    fresh.initialize(admin, INVEST_MIN_DELAY, 0, EXPOSURE_CAP_BPS, MAX_FEE, LIQUID_BUFFER_BPS);
 
-    assertEq(fresh.getMaxInvest(), 0);
+    assertEq(fresh.getExposureCapAbs(), 0);
     assertEq(fresh.getInvestableAmount(), 0);
   }
 
   function test_initialize_callableByAnyone() public {
     vm.prank(alice);
-    fresh.initialize(admin, INVEST_MIN_DELAY, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
+    fresh.initialize(
+      admin,
+      INVEST_MIN_DELAY,
+      EXPOSURE_CAP_ABS,
+      EXPOSURE_CAP_BPS,
+      MAX_FEE,
+      LIQUID_BUFFER_BPS
+    );
 
     assertTrue(fresh.hasRole(fresh.DEFAULT_ADMIN_ROLE(), admin));
     assertFalse(fresh.hasRole(fresh.DEFAULT_ADMIN_ROLE(), alice));
@@ -113,74 +148,109 @@ contract ReinvestmentControllerInitializeTest is ReinvestmentControllerTestBase 
 
   function test_initialize_revertsWith_InvalidZeroAddress() public {
     vm.expectRevert(IReinvestmentController.InvalidZeroAddress.selector);
-    fresh.initialize(address(0), INVEST_MIN_DELAY, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
+    fresh.initialize(
+      address(0),
+      INVEST_MIN_DELAY,
+      EXPOSURE_CAP_ABS,
+      EXPOSURE_CAP_BPS,
+      MAX_FEE,
+      LIQUID_BUFFER_BPS
+    );
   }
 
   function test_initialize_revertsWith_InvalidAmount_investMinDelayIsZero() public {
     vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
-    fresh.initialize(admin, 0, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
+    fresh.initialize(admin, 0, EXPOSURE_CAP_ABS, EXPOSURE_CAP_BPS, MAX_FEE, LIQUID_BUFFER_BPS);
   }
 
-  function test_initialize_revertsWith_InvalidAmount_maxInvestBpsIsZero() public {
+  function test_initialize_revertsWith_InvalidAmount_exposureCapBpsIsZero() public {
     vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
-    fresh.initialize(admin, INVEST_MIN_DELAY, MAX_INVEST, 0, MAX_FEE, BUFFER_BPS);
+    fresh.initialize(admin, INVEST_MIN_DELAY, EXPOSURE_CAP_ABS, 0, MAX_FEE, LIQUID_BUFFER_BPS);
   }
 
-  function test_initialize_revertsWith_InvalidAmount_maxInvestBpsAtPercentageFactor() public {
-    vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
-    fresh.initialize(admin, INVEST_MIN_DELAY, MAX_INVEST, PERCENTAGE_FACTOR, MAX_FEE, BUFFER_BPS);
-  }
-
-  function test_initialize_revertsWith_InvalidAmount_maxInvestBpsAbovePercentageFactor() public {
+  function test_initialize_revertsWith_InvalidAmount_exposureCapBpsAtPercentageFactor() public {
     vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
     fresh.initialize(
       admin,
       INVEST_MIN_DELAY,
-      MAX_INVEST,
-      PERCENTAGE_FACTOR + 1,
+      EXPOSURE_CAP_ABS,
+      PERCENTAGE_FACTOR,
       MAX_FEE,
-      BUFFER_BPS
+      LIQUID_BUFFER_BPS
     );
   }
 
-  function test_initialize_revertsWith_InvalidAmount_bufferBpsIsZero() public {
-    vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
-    fresh.initialize(admin, INVEST_MIN_DELAY, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, 0);
-  }
-
-  function test_initialize_revertsWith_InvalidAmount_bufferBpsAtPercentageFactor() public {
+  function test_initialize_revertsWith_InvalidAmount_exposureCapBpsAbovePercentageFactor() public {
     vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
     fresh.initialize(
       admin,
       INVEST_MIN_DELAY,
-      MAX_INVEST,
-      MAX_INVEST_BPS,
+      EXPOSURE_CAP_ABS,
+      PERCENTAGE_FACTOR + 1,
+      MAX_FEE,
+      LIQUID_BUFFER_BPS
+    );
+  }
+
+  function test_initialize_revertsWith_InvalidAmount_liquidBufferBpsIsZero() public {
+    vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
+    fresh.initialize(admin, INVEST_MIN_DELAY, EXPOSURE_CAP_ABS, EXPOSURE_CAP_BPS, MAX_FEE, 0);
+  }
+
+  function test_initialize_revertsWith_InvalidAmount_liquidBufferBpsAtPercentageFactor() public {
+    vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
+    fresh.initialize(
+      admin,
+      INVEST_MIN_DELAY,
+      EXPOSURE_CAP_ABS,
+      EXPOSURE_CAP_BPS,
       MAX_FEE,
       PERCENTAGE_FACTOR
     );
   }
 
-  function test_initialize_revertsWith_InvalidAmount_bufferBpsAbovePercentageFactor() public {
+  function test_initialize_revertsWith_InvalidAmount_liquidBufferBpsAbovePercentageFactor() public {
     vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
     fresh.initialize(
       admin,
       INVEST_MIN_DELAY,
-      MAX_INVEST,
-      MAX_INVEST_BPS,
+      EXPOSURE_CAP_ABS,
+      EXPOSURE_CAP_BPS,
       MAX_FEE,
       PERCENTAGE_FACTOR + 1
     );
   }
 
   function test_initialize_revertsWith_InvalidInitialization_calledTwice() public {
-    fresh.initialize(admin, INVEST_MIN_DELAY, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
+    fresh.initialize(
+      admin,
+      INVEST_MIN_DELAY,
+      EXPOSURE_CAP_ABS,
+      EXPOSURE_CAP_BPS,
+      MAX_FEE,
+      LIQUID_BUFFER_BPS
+    );
 
     vm.expectRevert(Initializable.InvalidInitialization.selector);
-    fresh.initialize(admin, INVEST_MIN_DELAY, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
+    fresh.initialize(
+      admin,
+      INVEST_MIN_DELAY,
+      EXPOSURE_CAP_ABS,
+      EXPOSURE_CAP_BPS,
+      MAX_FEE,
+      LIQUID_BUFFER_BPS
+    );
   }
 
   function test_initialize_revertsWith_InvalidInitialization_proxyInitializedAtDeployment() public {
     vm.expectRevert(Initializable.InvalidInitialization.selector);
-    controller.initialize(admin, INVEST_MIN_DELAY, MAX_INVEST, MAX_INVEST_BPS, MAX_FEE, BUFFER_BPS);
+    controller.initialize(
+      admin,
+      INVEST_MIN_DELAY,
+      EXPOSURE_CAP_ABS,
+      EXPOSURE_CAP_BPS,
+      MAX_FEE,
+      LIQUID_BUFFER_BPS
+    );
   }
 }

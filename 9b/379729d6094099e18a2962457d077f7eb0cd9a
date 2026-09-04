@@ -1,0 +1,32 @@
+tests/mocks/MockGatewayWallet.sol
+  s_09aa3b688ef995::t_c9edf97bd21a49 92,95,97
+tests/mocks/MockGatewayMinter.sol
+  s_09aa3b688ef995::t_c9edf97bd21a49 24-25,47-50,56-58
+  s_09aa3b688ef995::t_5443116ff4eb05 59
+tests/ReinvestmentController.Invariants.t.sol
+  s_09aa3b688ef995::t_69c31ef62c8515 28-29,69-70
+  s_09aa3b688ef995::t_c9edf97bd21a49 13-15,21-27,40-45,47,50,52,61
+tests/handlers/ReinvestmentControllerHandler.sol
+  s_09aa3b688ef995::t_69c31ef62c8515 18,29,97-98,101-102
+  s_09aa3b688ef995::t_0558f81eb4dd8b 82
+  s_09aa3b688ef995::t_3766fa449ff48e 96
+  s_09aa3b688ef995::t_c9edf97bd21a49 11,23,43,70,73-80,87,92-94,113
+  s_09aa3b688ef995::t_31bf82589ff174 81
+  s_09aa3b688ef995::t_1124b855cdeadc 104-105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "9b379729d6094099e18a2962457d077f7eb0cd9a",
+  "prompts": {},
+  "sessions": {
+    "s_09aa3b688ef995": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a06cfd-9290-7cf3-be42-0528a53adc9d",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "AlbertoCentonze <11707683+AlbertoCentonze@users.noreply.github.com>"
+    }
+  }
+}

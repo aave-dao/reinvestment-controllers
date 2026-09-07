@@ -21,6 +21,8 @@ contract MockGatewayMinter {
 
   MockGatewayWallet public immutable GATEWAY_WALLET;
 
+  uint256 public nextFee;
+
   constructor(address gatewayWallet) {
     GATEWAY_WALLET = MockGatewayWallet(gatewayWallet);
   }
@@ -42,10 +44,17 @@ contract MockGatewayMinter {
       address recipient = AddressLib._bytes32ToAddress(spec.getDestinationRecipient());
       uint256 value = spec.getValue();
 
-      GATEWAY_WALLET.gatewayBurn(token, depositor, value);
+      uint256 fee = nextFee;
+      nextFee = 0;
+
+      GATEWAY_WALLET.gatewayBurn(token, depositor, value, fee);
       IERC20(token).safeTransfer(recipient, value);
 
       emit Minted(token, recipient, value);
     }
+  }
+
+  function setNextFee(uint256 fee) external {
+    nextFee = fee;
   }
 }

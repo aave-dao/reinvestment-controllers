@@ -8,28 +8,25 @@ import {Math} from '@openzeppelin/contracts/utils/math/Math.sol';
 
 import {ReinvestmentController} from '../../src/ReinvestmentController.sol';
 
+import {MockGatewayMinter} from '../mocks/MockGatewayMinter.sol';
 import {MockGatewayWallet} from '../mocks/MockGatewayWallet.sol';
 import {MockHub} from '../mocks/MockHub.sol';
 import {MockUSDC} from '../mocks/MockUSDC.sol';
 import {GatewayPayloads} from '../utils/GatewayPayloads.sol';
 
 contract ReinvestmentControllerHandler is CommonBase, StdCheats, StdUtils, GatewayPayloads {
-  uint256 internal constant PERCENTAGE_FACTOR = 100_00;
+  error OnlySelf();
 
   ReinvestmentController internal immutable CONTROLLER;
   MockHub internal immutable HUB;
   MockGatewayWallet internal immutable WALLET;
+  MockGatewayMinter internal immutable MINTER;
   MockUSDC internal immutable USDC;
   address internal immutable ADMIN;
   address internal immutable KEEPER;
   address internal immutable PAUSER;
 
-  uint256 public investCalls;
-  uint256 public divestCalls;
-  uint256 public initiateWithdrawalCalls;
-  uint256 public withdrawCalls;
-  uint256 public totalInvested;
-  uint256 public totalDivested;
+  uint256 public fullExitFailures;
 
   constructor(
     ReinvestmentController controller,
@@ -43,6 +40,7 @@ contract ReinvestmentControllerHandler is CommonBase, StdCheats, StdUtils, Gatew
     CONTROLLER = controller;
     HUB = hub;
     WALLET = wallet;
+    MINTER = MockGatewayMinter(address(controller.GATEWAY_MINTER()));
     USDC = usdc;
     ADMIN = admin;
     KEEPER = keeper;
@@ -67,85 +65,52 @@ contract ReinvestmentControllerHandler is CommonBase, StdCheats, StdUtils, Gatew
     vm.warp(block.timestamp + CONTROLLER.getInvestMinDelay() + 1);
     vm.prank(KEEPER);
     CONTROLLER.invest(amount);
-
-    investCalls++;
-    totalInvested += amount;
   }
 
-  function divest(uint256 amount) external {
+  function divest(uint256 amount, uint256 actualFee) external {
     if (CONTROLLER.paused()) return;
 
-    uint256 divestable = Math.min(
-      CONTROLLER.getInvestedAmount(),
-      WALLET.availableBalance(address(USDC), address(CONTROLLER))
-    );
+    uint256 maxFee = CONTROLLER.getMaxFee();
+    uint256 swept = CONTROLLER.getInvestedAmount();
+    if (swept <= maxFee) return;
+
+    actualFee = bound(actualFee, 0, maxFee);
+
+    uint256 available = WALLET.availableBalance(address(USDC), address(CONTROLLER));
+    if (available <= actualFee) return;
+
+    uint256 divestable = Math.min(swept - maxFee, available - actualFee);
     if (divestable == 0) return;
 
     amount = bound(amount, 1, divestable);
 
+    MINTER.setNextFee(actualFee);
     vm.prank(KEEPER);
     CONTROLLER.divest(amount, _encodeAttestation(_defaultTransferSpec(amount)), 'signature');
-
-    divestCalls++;
-    totalDivested += amount;
   }
 
-  function pause() external {
-    if (CONTROLLER.paused()) return;
+  function fullExit(uint256 blocksAhead) external {
+    uint256 available = WALLET.availableBalance(address(USDC), address(CONTROLLER));
+    if (available == 0) return;
+
+    try this.executeFullExit(blocksAhead) {} catch {
+      fullExitFailures++;
+    }
+  }
+
+  function executeFullExit(uint256 blocksAhead) external {
+    require(msg.sender == address(this), OnlySelf());
 
     vm.prank(PAUSER);
     CONTROLLER.pause();
-  }
-
-  function unpause() external {
-    if (!CONTROLLER.paused()) return;
-    if (WALLET.withdrawingBalance(address(USDC), address(CONTROLLER)) > 0) return;
-
-    vm.prank(ADMIN);
-    CONTROLLER.unpause();
-  }
-
-  function initiateWithdrawal() external {
-    if (!CONTROLLER.paused()) return;
-    if (WALLET.withdrawingBalance(address(USDC), address(CONTROLLER)) > 0) return;
-
-    uint256 available = WALLET.availableBalance(address(USDC), address(CONTROLLER));
-    if (available == 0 || available > CONTROLLER.getInvestedAmount()) return;
-
     vm.prank(ADMIN);
     CONTROLLER.initiateWithdrawal();
-
-    initiateWithdrawalCalls++;
-  }
-
-  function withdraw(uint256 blocksAhead) external {
-    if (WALLET.withdrawingBalance(address(USDC), address(CONTROLLER)) == 0) return;
 
     vm.roll(WALLET.withdrawalBlock(address(USDC), address(CONTROLLER)) + bound(blocksAhead, 0, 10));
     vm.prank(ADMIN);
     CONTROLLER.withdraw();
-
-    withdrawCalls++;
-  }
-
-  function setLiquidBufferBps(uint256 liquidBufferBps) external {
     vm.prank(ADMIN);
-    CONTROLLER.setLiquidBufferBps(bound(liquidBufferBps, 1, PERCENTAGE_FACTOR - 1));
-  }
-
-  function setExposureCapAbs(uint256 exposureCapAbs) external {
-    vm.prank(ADMIN);
-    CONTROLLER.setExposureCapAbs(bound(exposureCapAbs, 0, type(uint96).max));
-  }
-
-  function setExposureCapBps(uint256 exposureCapBps) external {
-    vm.prank(ADMIN);
-    CONTROLLER.setExposureCapBps(bound(exposureCapBps, 1, PERCENTAGE_FACTOR - 1));
-  }
-
-  function setInvestMinDelay(uint256 investMinDelay) external {
-    vm.prank(ADMIN);
-    CONTROLLER.setInvestMinDelay(bound(investMinDelay, 1, 30 days));
+    CONTROLLER.unpause();
   }
 
   function supplyToHub(uint256 amount) external {

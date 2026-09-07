@@ -89,12 +89,12 @@ contract MockGatewayWallet {
   /// @dev Transfers to the minter rather than burning. The real system burns here and mints on
   /// the destination domain, but the controller only permits same-domain transfers, so moving
   /// the tokens is equivalent and keeps total supply conserved for the invariant suite.
-  function gatewayBurn(address token, address depositor, uint256 value) external {
+  function gatewayBurn(address token, address depositor, uint256 value, uint256 fee) external {
     require(msg.sender == gatewayMinter, NotGatewayMinter());
 
-    _availableBalances[token][depositor] -= value;
+    _availableBalances[token][depositor] -= value + fee;
 
-    IERC20(token).safeTransfer(msg.sender, value);
+    IERC20(token).safeTransfer(msg.sender, value + fee);
   }
 
   function domainSeparator() external view returns (bytes32) {

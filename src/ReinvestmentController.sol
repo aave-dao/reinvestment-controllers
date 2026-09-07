@@ -192,7 +192,6 @@ contract ReinvestmentController is
     uint256 amount = GATEWAY_WALLET.availableBalance(address(USDC), address(this));
 
     require(amount > 0, InvalidAmount());
-    require(amount <= HUB.getAssetSwept(ASSET_ID), InsufficientLiquidity());
 
     GATEWAY_WALLET.initiateWithdrawal(address(USDC), amount);
 
@@ -310,19 +309,19 @@ contract ReinvestmentController is
 
   /// @inheritdoc IReinvestmentController
   function isValidSignature(
-    bytes32 hash_,
-    bytes memory signature
+    bytes32 hash,
+    bytes calldata signatureData
   ) external view whenNotPaused returns (bytes4) {
-    (bytes memory adminSignature, bytes memory burnIntentPayload) = abi.decode(
-      signature,
+    (bytes memory keeperSignature, bytes memory burnIntentPayload) = abi.decode(
+      signatureData,
       (bytes, bytes)
     );
 
     bytes32 structHash = BurnIntentLib.getTypedDataHash(burnIntentPayload);
     bytes32 digest = MessageHashUtils.toTypedDataHash(GATEWAY_WALLET.domainSeparator(), structHash);
-    require(digest == hash_, HashMismatch());
+    require(digest == hash, HashMismatch());
 
-    address recoveredSigner = ECDSA.recover(digest, adminSignature);
+    address recoveredSigner = ECDSA.recover(digest, keeperSignature);
     require(hasRole(KEEPER_ROLE, recoveredSigner), InvalidSignature());
 
     _validateBurnIntent(burnIntentPayload);

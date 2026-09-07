@@ -149,9 +149,7 @@ contract ReinvestmentControllerInitiateWithdrawalTest is ReinvestmentControllerT
     controller.initiateWithdrawal();
   }
 
-  function test_initiateWithdrawal_revertsWith_InsufficientLiquidity_availableExceedsSwept()
-    public
-  {
+  function test_initiateWithdrawal_donationExceedsSwept() public {
     usdc.mint(alice, 1);
 
     vm.startPrank(alice);
@@ -159,8 +157,22 @@ contract ReinvestmentControllerInitiateWithdrawalTest is ReinvestmentControllerT
     wallet.depositFor(address(usdc), address(controller), 1);
     vm.stopPrank();
 
-    vm.expectRevert(IReinvestmentController.InsufficientLiquidity.selector);
+    vm.expectEmit(address(controller));
+    emit IReinvestmentController.WithdrawalInitiated(INVESTED);
+
     vm.prank(admin);
     controller.initiateWithdrawal();
+
+    assertEq(wallet.withdrawingBalance(address(usdc), address(controller)), INVESTED);
+    assertEq(wallet.availableBalance(address(usdc), address(controller)), 1);
+
+    vm.roll(block.number + WITHDRAWAL_DELAY);
+
+    vm.prank(admin);
+    controller.withdraw();
+
+    assertEq(hub.getAssetSwept(assetId), 0);
+    assertEq(hub.getAssetLiquidity(assetId), SUPPLIED);
+    assertEq(wallet.availableBalance(address(usdc), address(controller)), 1);
   }
 }

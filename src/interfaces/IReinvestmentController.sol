@@ -146,8 +146,11 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// field of the transfer spec pinned to `self`
   /// @dev The caller must hold and have approved {maxFee} of USDC. It is forwarded to the Hub
   /// alongside the minted amount, because the Gateway debits `amount + fee` when Circle later
-  /// burns. Reclaiming `amount + maxFee` keeps the Hub's swept figure matched to the balance
-  /// actually held at the Gateway, rather than overstating it by the fee on every divest
+  /// burns. Circle charges a flat fee equal to {maxFee} today, so the two match and nothing is
+  /// left behind. Were it ever to charge less, that lower fee would not be knowable here, since
+  /// Circle may settle the burn only after issuing the attestation. {maxFee} is charged
+  /// regardless, which errs toward over-funding the Hub rather than under-funding it, and
+  /// strands the difference in the Gateway
   /// @param amount The amount of funds to withdraw
   /// @param attestationPayload The specification of the withdrawal
   /// @param signature The signature that validates attestation was originated by authorized entity
@@ -157,10 +160,13 @@ interface IReinvestmentController is IERC1271, IAccessControl {
     bytes calldata signature
   ) external;
 
-  /// @notice Initiates an on-chain withdrawal of the entire Gateway balance
+  /// @notice Initiates an on-chain withdrawal of the Gateway balance, capped at the swept amount
   /// @dev Only while paused, so no attestation or burn intent can be live against the balance
   /// being moved. Moving it out of the Gateway's available bucket is itself what stops any
-  /// further burn from succeeding
+  /// further burn from succeeding. The available balance can exceed what the Hub swept, either
+  /// through a third-party `depositFor`, which is permissionless, or through {divest} pre-paying
+  /// a fee higher than Circle charged. Neither is reclaimable, since the Hub can only take back
+  /// what it swept, so the excess is left in the Gateway
   function initiateWithdrawal() external;
 
   /// @notice Finalizes a pending withdrawal after required time has elapsed

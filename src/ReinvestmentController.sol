@@ -189,7 +189,9 @@ contract ReinvestmentController is
       WithdrawalInProcess()
     );
 
-    uint256 amount = GATEWAY_WALLET.availableBalance(address(USDC), address(this));
+    uint256 swept = HUB.getAssetSwept(ASSET_ID);
+    uint256 available = GATEWAY_WALLET.availableBalance(address(USDC), address(this));
+    uint256 amount = available > swept ? swept : available;
 
     require(amount > 0, InvalidAmount());
 

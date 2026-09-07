@@ -26,6 +26,18 @@ interface IMintsErrors {
   error InvalidAttestationSigner();
 }
 
+interface IBurns {
+  function addBurnSigner(address signer) external;
+
+  function gatewayBurn(bytes calldata calldataBytes, bytes calldata signature) external;
+}
+
+interface IContractSignersAllowlist {
+  function allowlistContractSigner(address contractAddr) external;
+
+  function contractSignersAllowlister() external view returns (address);
+}
+
 contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
   uint256 internal constant FORK_BLOCK = 25_796_690;
 
@@ -56,6 +68,8 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
   uint256 internal keeperPrivateKey;
   address internal circleSigner;
   uint256 internal circleSignerPrivateKey;
+  address internal burnSigner;
+  uint256 internal burnSignerPrivateKey;
 
   ReinvestmentController internal controller;
   uint256 internal assetId;
@@ -65,6 +79,7 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
 
     (keeper, keeperPrivateKey) = makeAddrAndKey('keeper');
     (circleSigner, circleSignerPrivateKey) = makeAddrAndKey('circleSigner');
+    (burnSigner, burnSignerPrivateKey) = makeAddrAndKey('burnSigner');
 
     controller = ReinvestmentController(
       address(
@@ -99,6 +114,8 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
 
     _pointHubAtTheController();
     _allowCircleSigner();
+    _allowBurnSigner();
+    _allowControllerAsContractSigner();
 
     vm.warp(block.timestamp + INVEST_MIN_DELAY + 1);
   }
@@ -153,6 +170,8 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
     uint256 hubBalanceBefore = IERC20(USDC).balanceOf(HUB);
 
     uint256 amount = invested - MAX_FEE;
+    _burn(amount, MAX_FEE);
+
     (bytes memory attestation, bytes memory signature) = _attest(amount);
 
     vm.expectEmit(HUB);
@@ -169,6 +188,38 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
     assertEq(IERC20(USDC).balanceOf(HUB), hubBalanceBefore + invested);
     assertEq(IERC20(USDC).balanceOf(address(controller)), 0);
     assertEq(IERC20(USDC).balanceOf(keeper), FEE_FUNDING - MAX_FEE);
+    assertEq(IGatewayWallet(GATEWAY_WALLET).availableBalance(USDC, address(controller)), 0);
+  }
+
+  /// @dev Circle charges a flat fee equal to MAX_FEE today, so this covers the hypothetical where
+  /// it charges less. The Hub is made whole either way; the difference stays in the Gateway
+  function test_divest_circleChargesBelowMaxFee() public {
+    uint256 invested = controller.getInvestableAmount();
+    vm.prank(keeper);
+    controller.invest(invested);
+    uint256 liquidityBefore = IHub(HUB).getAssetLiquidity(assetId);
+
+    uint256 amount = invested - MAX_FEE;
+    uint256 actualFee = 4e5;
+    _burn(amount, actualFee);
+
+    (bytes memory attestation, bytes memory signature) = _attest(amount);
+
+    vm.expectEmit(address(controller));
+    emit IReinvestmentController.Divested(amount, MAX_FEE);
+
+    vm.prank(keeper);
+    controller.divest(amount, attestation, signature);
+
+    assertEq(IHub(HUB).getAssetLiquidity(assetId), liquidityBefore + invested);
+    assertEq(IHub(HUB).getAssetSwept(assetId), 0);
+    assertEq(IERC20(USDC).balanceOf(address(controller)), 0);
+    assertEq(IERC20(USDC).balanceOf(keeper), FEE_FUNDING - MAX_FEE);
+    assertEq(
+      IGatewayWallet(GATEWAY_WALLET).availableBalance(USDC, address(controller)),
+      MAX_FEE - actualFee
+    );
+    assertEq(controller.getDrift(), 0);
   }
 
   function test_divest_revertsWith_InsufficientLiquidity() public {
@@ -360,5 +411,44 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
   function _allowCircleSigner() internal {
     vm.prank(Ownable(GATEWAY_MINTER).owner());
     IAttestationSigners(GATEWAY_MINTER).addAttestationSigner(circleSigner);
+  }
+
+  function _allowBurnSigner() internal {
+    vm.prank(Ownable(GATEWAY_WALLET).owner());
+    IBurns(GATEWAY_WALLET).addBurnSigner(burnSigner);
+  }
+
+  /// @dev The depositor is the controller, so the Gateway only takes the ERC-1271 path for its
+  /// burn intent signature once the depositor is allowlisted. Otherwise it falls back to ECDSA
+  /// recovery and resolves to the wrong signer
+  function _allowControllerAsContractSigner() internal {
+    vm.prank(IContractSignersAllowlist(GATEWAY_WALLET).contractSignersAllowlister());
+    IContractSignersAllowlist(GATEWAY_WALLET).allowlistContractSigner(address(controller));
+  }
+
+  /// @dev Reproduces the transaction Circle's operator sends on the source domain. The Gateway
+  /// debits `amount + fee`, so passing a fee below MAX_FEE exercises the case where {divest}
+  /// pre-pays more than Circle charged, which its flat fee does not do today
+  function _burn(uint256 amount, uint256 fee) internal {
+    bytes memory intent = _encodeBurnIntent(_defaultTransferSpec(amount), MAX_FEE);
+    (, bytes memory signature) = _signBurnIntent(keeperPrivateKey, intent);
+
+    bytes[] memory intents = new bytes[](1);
+    intents[0] = intent;
+
+    bytes[] memory signatures = new bytes[](1);
+    signatures[0] = signature;
+
+    uint256[][] memory fees = new uint256[][](1);
+    fees[0] = new uint256[](1);
+    fees[0][0] = fee;
+
+    bytes memory calldataBytes = abi.encode(intents, signatures, fees);
+    (uint8 v, bytes32 r, bytes32 s) = vm.sign(
+      burnSignerPrivateKey,
+      MessageHashUtils.toEthSignedMessageHash(keccak256(calldataBytes))
+    );
+
+    IBurns(GATEWAY_WALLET).gatewayBurn(calldataBytes, abi.encodePacked(r, s, v));
   }
 }

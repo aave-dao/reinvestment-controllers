@@ -48,7 +48,7 @@ contract ReinvestmentControllerInvariantsTest is ReinvestmentControllerTestBase 
   }
 
   function invariant_accountedAssetsArePhysicallyHeld() public view {
-    assertEq(
+    assertGe(
       usdc.balanceOf(address(hub)) + wallet.totalBalance(address(usdc), address(controller)),
       hub.getAddedAssets(assetId)
     );
@@ -58,15 +58,19 @@ contract ReinvestmentControllerInvariantsTest is ReinvestmentControllerTestBase 
     assertEq(usdc.balanceOf(address(hub)), hub.getAssetLiquidity(assetId));
   }
 
-  function invariant_gatewayBalanceEqualsSwept() public view {
-    assertEq(hub.getAssetSwept(assetId), wallet.totalBalance(address(usdc), address(controller)));
+  /// @dev Equality holds while Circle's fee matches {maxFee}, as its flat fee does today, but
+  /// {divest} pre-pays {maxFee} regardless, so a lower fee would leave the difference in the
+  /// Gateway. Over-funding is the safe direction; the Gateway balance falling below what the Hub
+  /// swept is what would leave assets unbacked
+  function invariant_gatewayBalanceNeverFallsBelowSwept() public view {
+    assertGe(wallet.totalBalance(address(usdc), address(controller)), hub.getAssetSwept(assetId));
   }
 
   function invariant_controllerHoldsNoTokensAtRest() public view {
     assertEq(usdc.balanceOf(address(controller)), 0);
   }
 
-  function invariant_fullGatewayBalanceCanAlwaysExit() public view {
+  function invariant_sweptBalanceCanAlwaysExit() public view {
     assertEq(handler.fullExitFailures(), 0);
   }
 

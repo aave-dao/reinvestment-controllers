@@ -89,9 +89,13 @@ contract ReinvestmentControllerHandler is CommonBase, StdCheats, StdUtils, Gatew
     CONTROLLER.divest(amount, _encodeAttestation(_defaultTransferSpec(amount)), 'signature');
   }
 
+  /// @dev A Gateway balance above what the Hub swept is a donation, or a fee {divest} pre-paid
+  /// but Circle did not charge, and neither is reclaimable. Once swept reaches zero there is
+  /// nothing left for the Hub to exit
   function fullExit(uint256 blocksAhead) external {
     uint256 available = WALLET.availableBalance(address(USDC), address(CONTROLLER));
     if (available == 0) return;
+    if (CONTROLLER.getInvestedAmount() == 0) return;
 
     try this.executeFullExit(blocksAhead) {} catch {
       fullExitFailures++;

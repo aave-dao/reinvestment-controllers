@@ -5,6 +5,9 @@ out/
 # Node
 node_modules/
 
+# Local editor settings
+.vscode/settings.json
+
 # Commonly ignored directories
 .logs/
 .ignore/

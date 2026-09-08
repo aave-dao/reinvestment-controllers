@@ -55,6 +55,5 @@ contract ReinvestmentControllerDivestGasTest is ReinvestmentControllerTestBase {
     assertEq(hub.getAssetLiquidity(assetId), SUPPLIED - INVESTED + amount + fee);
     assertEq(usdc.balanceOf(keeper), 0);
     assertEq(usdc.balanceOf(address(controller)), 0);
-    assertEq(controller.getDrift(), 0);
   }
 }

@@ -89,32 +89,10 @@ contract ReinvestmentControllerInitializeTest is ReinvestmentControllerTestBase 
     assertEq(fresh.getExposureCapBps(), exposureCapBps_);
     assertEq(fresh.getMaxFee(), maxFee_);
     assertEq(fresh.getLiquidBufferBps(), liquidBufferBps_);
-  }
-
-  function test_initialize_grantsEveryRoleToAdminOnly() public {
-    fresh.initialize(
-      admin,
-      INVEST_MIN_DELAY,
-      EXPOSURE_CAP_ABS,
-      EXPOSURE_CAP_BPS,
-      MAX_FEE,
-      LIQUID_BUFFER_BPS
-    );
 
     assertFalse(fresh.hasRole(fresh.DEFAULT_ADMIN_ROLE(), alice));
     assertFalse(fresh.hasRole(fresh.KEEPER_ROLE(), alice));
     assertFalse(fresh.hasRole(fresh.PAUSER_ROLE(), alice));
-  }
-
-  function test_initialize_leavesImmutablesUntouched() public {
-    fresh.initialize(
-      admin,
-      INVEST_MIN_DELAY,
-      EXPOSURE_CAP_ABS,
-      EXPOSURE_CAP_BPS,
-      MAX_FEE,
-      LIQUID_BUFFER_BPS
-    );
 
     assertEq(address(fresh.GATEWAY_WALLET()), address(wallet));
     assertEq(address(fresh.GATEWAY_MINTER()), address(minter));
@@ -143,6 +121,18 @@ contract ReinvestmentControllerInitializeTest is ReinvestmentControllerTestBase 
 
     assertTrue(fresh.hasRole(fresh.DEFAULT_ADMIN_ROLE(), admin));
     assertFalse(fresh.hasRole(fresh.DEFAULT_ADMIN_ROLE(), alice));
+  }
+
+  function test_initialize_revertsWith_InvalidInitialization_onTheImplementation() public {
+    vm.expectRevert(Initializable.InvalidInitialization.selector);
+    implementation.initialize(
+      admin,
+      INVEST_MIN_DELAY,
+      EXPOSURE_CAP_ABS,
+      EXPOSURE_CAP_BPS,
+      MAX_FEE,
+      LIQUID_BUFFER_BPS
+    );
   }
 
   function test_initialize_revertsWith_InvalidZeroAddress() public {

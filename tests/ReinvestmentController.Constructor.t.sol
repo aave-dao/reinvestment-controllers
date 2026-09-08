@@ -22,8 +22,8 @@ contract ReinvestmentControllerConstructorTest is ReinvestmentControllerTestBase
   function test_constructor_definesDistinctRoleIdentifiers() public view {
     assertEq(implementation.KEEPER_ROLE(), keccak256('KEEPER_ROLE'));
     assertEq(implementation.PAUSER_ROLE(), keccak256('PAUSER_ROLE'));
-    assertTrue(implementation.KEEPER_ROLE() != implementation.PAUSER_ROLE());
-    assertTrue(implementation.KEEPER_ROLE() != implementation.DEFAULT_ADMIN_ROLE());
+    assertNotEq(implementation.KEEPER_ROLE(), implementation.PAUSER_ROLE());
+    assertNotEq(implementation.KEEPER_ROLE(), implementation.DEFAULT_ADMIN_ROLE());
   }
 
   function test_constructor_leavesImplementationUnconfigured() public view {
@@ -32,6 +32,7 @@ contract ReinvestmentControllerConstructorTest is ReinvestmentControllerTestBase
     assertEq(implementation.getExposureCapAbs(), 0);
     assertEq(implementation.getExposureCapBps(), 0);
     assertEq(implementation.getLiquidBufferBps(), 0);
+    assertEq(implementation.getMaxFee(), 0);
     assertFalse(implementation.hasRole(implementation.DEFAULT_ADMIN_ROLE(), admin));
   }
 
@@ -47,18 +48,6 @@ contract ReinvestmentControllerConstructorTest is ReinvestmentControllerTestBase
     );
 
     assertEq(other.ASSET_ID(), otherHub.USDC_ASSET_ID());
-  }
-
-  function test_constructor_revertsWith_InvalidInitialization_onTheImplementation() public {
-    vm.expectRevert(Initializable.InvalidInitialization.selector);
-    implementation.initialize(
-      admin,
-      INVEST_MIN_DELAY,
-      EXPOSURE_CAP_ABS,
-      EXPOSURE_CAP_BPS,
-      MAX_FEE,
-      LIQUID_BUFFER_BPS
-    );
   }
 
   function test_constructor_revertsWith_InvalidZeroAddress_gatewayWallet() public {

@@ -8,6 +8,9 @@ import {IReinvestmentController} from '../src/interfaces/IReinvestmentController
 import {ReinvestmentControllerTestBase} from './ReinvestmentController.Base.t.sol';
 
 contract ReinvestmentControllerWithdrawTest is ReinvestmentControllerTestBase {
+  // From GatewayWallet
+  error WithdrawalNotYetAvailable();
+
   uint256 internal constant INVESTED = 400_000e6;
 
   function setUp() public override {
@@ -95,6 +98,16 @@ contract ReinvestmentControllerWithdrawTest is ReinvestmentControllerTestBase {
     controller.unpause();
 
     assertFalse(controller.paused());
+  }
+
+  function test_withdraw_revertsWith_WithdrawalNotYetAvailable() public {
+    vm.prank(admin);
+    controller.initiateWithdrawal();
+
+    vm.roll(block.number + WITHDRAWAL_DELAY - 1);
+    vm.expectRevert(WithdrawalNotYetAvailable.selector);
+    vm.prank(admin);
+    controller.withdraw();
   }
 
   function test_withdraw_revertsWith_AccessControlUnauthorizedAccount() public {

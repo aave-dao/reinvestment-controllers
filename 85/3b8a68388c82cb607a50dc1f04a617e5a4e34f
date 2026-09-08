@@ -1,0 +1,31 @@
+.gitignore
+  s_aa2f67686d5279::t_df1012d6ce6dd8 8-10
+tests/gas/ReinvestmentController.IsValidSignature.t.sol
+  s_aa2f67686d5279::t_7de60ddb82b5c4 1-19
+tests/gas/ReinvestmentController.Invest.t.sol
+  s_aa2f67686d5279::t_7de60ddb82b5c4 1-29
+tests/gas/ReinvestmentController.InitiateWithdrawal.t.sol
+  s_aa2f67686d5279::t_7de60ddb82b5c4 1-19
+snapshots/ReinvestmentController.Operations.json
+  s_aa2f67686d5279::t_3ef97bdace9d25 1-10
+tests/gas/ReinvestmentController.Divest.t.sol
+  s_aa2f67686d5279::t_7de60ddb82b5c4 1-60
+tests/gas/ReinvestmentController.Withdraw.t.sol
+  s_aa2f67686d5279::t_7de60ddb82b5c4 1-24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "853b8a68388c82cb607a50dc1f04a617e5a4e34f",
+  "prompts": {},
+  "sessions": {
+    "s_aa2f67686d5279": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a08032-9c70-7042-845f-20c75f14675a",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "AlbertoCentonze <11707683+AlbertoCentonze@users.noreply.github.com>"
+    }
+  }
+}

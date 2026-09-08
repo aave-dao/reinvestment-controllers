@@ -1,0 +1,19 @@
+README.md
+  s_aa2f67686d5279::t_5944057de96249 1-72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "087dfdda469706ca32248abec4ebb4911539aad1",
+  "prompts": {},
+  "sessions": {
+    "s_aa2f67686d5279": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a08032-9c70-7042-845f-20c75f14675a",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "AlbertoCentonze <11707683+AlbertoCentonze@users.noreply.github.com>"
+    }
+  }
+}

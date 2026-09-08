@@ -23,7 +23,6 @@ contract ReinvestmentControllerUnpauseTest is ReinvestmentControllerTestBase {
     controller.unpause();
 
     assertFalse(controller.paused());
-    assertEq(controller.getPausedAt(), 0);
   }
 
   function test_unpause_restoresInvest() public {

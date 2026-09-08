@@ -67,8 +67,6 @@ contract ReinvestmentController is
     uint256 exposureCapBps;
     /// @dev Maximum fee payable to the Gateway operator on a withdrawal (in absolute terms)
     uint256 maxFee;
-    /// @dev Timestamp of the most recent pause, zeroed on unpause
-    uint256 pausedAt;
   }
 
   /// @dev The storage slot for the ReinvestmentController storage struct.
@@ -191,7 +189,7 @@ contract ReinvestmentController is
 
     uint256 swept = HUB.getAssetSwept(ASSET_ID);
     uint256 available = GATEWAY_WALLET.availableBalance(address(USDC), address(this));
-    uint256 amount = available > swept ? swept : available;
+    uint256 amount = Math.min(available, swept);
 
     require(amount > 0, InvalidAmount());
 
@@ -215,7 +213,6 @@ contract ReinvestmentController is
 
   /// @inheritdoc IReinvestmentController
   function pause() external onlyRole(PAUSER_ROLE) {
-    _getReinvestmentControllerStorage().pausedAt = block.timestamp;
     _pause();
   }
 
@@ -226,7 +223,6 @@ contract ReinvestmentController is
       WithdrawalInProcess()
     );
 
-    _getReinvestmentControllerStorage().pausedAt = 0;
     _unpause();
   }
 
@@ -266,15 +262,6 @@ contract ReinvestmentController is
   }
 
   /// @inheritdoc IReinvestmentController
-  function getDrift() external view returns (uint256) {
-    uint256 swept = HUB.getAssetSwept(ASSET_ID);
-    uint256 held = GATEWAY_WALLET.availableBalance(address(USDC), address(this)) +
-      GATEWAY_WALLET.withdrawingBalance(address(USDC), address(this));
-
-    return swept > held ? swept - held : 0;
-  }
-
-  /// @inheritdoc IReinvestmentController
   function getInvestMinDelay() external view returns (uint256) {
     return _getReinvestmentControllerStorage().investMinDelay;
   }
@@ -302,11 +289,6 @@ contract ReinvestmentController is
   /// @inheritdoc IReinvestmentController
   function getLiquidBufferBps() external view returns (uint256) {
     return _getReinvestmentControllerStorage().liquidBufferBps;
-  }
-
-  /// @inheritdoc IReinvestmentController
-  function getPausedAt() external view returns (uint256) {
-    return _getReinvestmentControllerStorage().pausedAt;
   }
 
   /// @inheritdoc IReinvestmentController

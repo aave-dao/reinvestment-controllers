@@ -95,7 +95,6 @@ contract ReinvestmentControllerWithdrawTest is ReinvestmentControllerTestBase {
     controller.unpause();
 
     assertFalse(controller.paused());
-    assertEq(controller.getPausedAt(), 0);
   }
 
   function test_withdraw_revertsWith_AccessControlUnauthorizedAccount() public {

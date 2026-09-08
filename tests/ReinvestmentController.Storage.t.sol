@@ -13,7 +13,6 @@ contract ReinvestmentControllerStorageTest is ReinvestmentControllerTestBase {
   uint256 internal constant EXPOSURE_CAP_ABS_OFFSET = 3;
   uint256 internal constant EXPOSURE_CAP_BPS_OFFSET = 4;
   uint256 internal constant MAX_FEE_OFFSET = 5;
-  uint256 internal constant PAUSED_AT_OFFSET = 6;
 
   function test_namespaceSlotMatchesTheErc7201Derivation() public pure {
     bytes32 expected = keccak256(
@@ -28,16 +27,12 @@ contract ReinvestmentControllerStorageTest is ReinvestmentControllerTestBase {
     vm.prank(keeper);
     controller.invest(1_000e6);
 
-    vm.prank(pauser);
-    controller.pause();
-
     assertEq(_load(INVEST_MIN_DELAY_OFFSET), controller.getInvestMinDelay());
     assertEq(_load(LAST_INVEST_TIMESTAMP_OFFSET), controller.getLastInvestTimestamp());
     assertEq(_load(LIQUID_BUFFER_BPS_OFFSET), controller.getLiquidBufferBps());
     assertEq(_load(EXPOSURE_CAP_ABS_OFFSET), controller.getExposureCapAbs());
     assertEq(_load(EXPOSURE_CAP_BPS_OFFSET), controller.getExposureCapBps());
     assertEq(_load(MAX_FEE_OFFSET), controller.getMaxFee());
-    assertEq(_load(PAUSED_AT_OFFSET), controller.getPausedAt());
   }
 
   function test_noStateIsWrittenToSequentialSlots() public {

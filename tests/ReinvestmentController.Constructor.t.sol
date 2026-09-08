@@ -32,7 +32,6 @@ contract ReinvestmentControllerConstructorTest is ReinvestmentControllerTestBase
     assertEq(implementation.getExposureCapAbs(), 0);
     assertEq(implementation.getExposureCapBps(), 0);
     assertEq(implementation.getLiquidBufferBps(), 0);
-    assertEq(implementation.getPausedAt(), 0);
     assertFalse(implementation.hasRole(implementation.DEFAULT_ADMIN_ROLE(), admin));
   }
 

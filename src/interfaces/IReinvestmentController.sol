@@ -252,13 +252,6 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// @return The amount invested
   function getInvestedAmount() external view returns (uint256);
 
-  /// @notice Returns the amount by which the Hub's swept figure exceeds the balance actually
-  /// held at the Gateway
-  /// @dev Zero in normal operation, since {divest} pre-pays the fee. A non-zero value means a
-  /// burn charged more than was pre-paid, and that much of the Hub's asset base is unbacked
-  /// @return The unbacked amount
-  function getDrift() external view returns (uint256);
-
   /// @notice Validates an ERC-1271 signature over a Circle Gateway burn intent
   /// @dev Called by the Gateway to confirm this contract authorized a withdrawal, as the
   /// contract is the depositor, recipient and signer of every burn intent it submits.
@@ -303,8 +296,4 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// @notice Returns the minimum amount that must remain uninvested in the Hub
   /// @return The amount that must remain uninvested (in BPS)
   function getLiquidBufferBps() external view returns (uint256);
-
-  /// @notice Returns the timestamp of the most recent pause, or zero if not paused
-  /// @return The timestamp at which {pause} was last called
-  function getPausedAt() external view returns (uint256);
 }

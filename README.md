@@ -26,8 +26,14 @@ the Hub's `totalAddedAssets`, so the gap prices into supplier shares as phantom 
 the Hub has no way to write it down — `reportDeficit` is spoke-only and untied to `swept`.
 
 So `divest` pre-pays: the caller transfers `maxFee` in, and the controller reclaims
-`amount + maxFee`. The drift never exists rather than being repaired after the fact. `getDrift`
-reports any residue, which should be zero in normal operation.
+`amount + maxFee`. The pre-payment is `maxFee` regardless of what Circle actually charges,
+because a lower fee is not knowable on-chain — Circle attests before it burns, and neither the
+attestation nor the transfer spec carries a fee. Circle charges a flat fee equal to `maxFee`
+today, so the two match exactly and nothing is left behind. Were it ever to charge less, the
+difference would stay in the Gateway, leaving it holding more than `swept` rather than less —
+the opposite of the phantom-asset case above, and the safe direction. `initiateWithdrawal` caps
+its withdrawal at `swept`, so neither that residue nor a third-party `depositFor` donation can
+block the exit.
 
 The attestation names **the controller** as `destinationRecipient`, not the Hub. Minting
 straight to the Hub would remove the transfer, but `Hub.reclaim` only checks that the Hub's

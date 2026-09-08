@@ -15,7 +15,7 @@ jobs:
       contents: read
     env:
       FOUNDRY_PROFILE: ${{ github.event_name == 'pull_request' && 'pr' || github.ref == 'refs/heads/main' && 'ci' || 'default' }}
-      RPC_MAINNET: ${{ secrets.RPC_MAINNET }}
+      RPC_MAINNET: https://eth-mainnet.g.alchemy.com/v2/${{ secrets.ALCHEMY_API_KEY }}
     steps:
       - uses: actions/checkout@v6
         with:

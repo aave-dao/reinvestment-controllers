@@ -219,7 +219,6 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
       IGatewayWallet(GATEWAY_WALLET).availableBalance(USDC, address(controller)),
       MAX_FEE - actualFee
     );
-    assertEq(controller.getDrift(), 0);
   }
 
   function test_divest_revertsWith_InsufficientLiquidity() public {

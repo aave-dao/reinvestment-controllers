@@ -53,7 +53,6 @@ contract ReinvestmentControllerInitializeTest is ReinvestmentControllerTestBase 
     assertEq(fresh.getExposureCapBps(), EXPOSURE_CAP_BPS);
     assertEq(fresh.getMaxFee(), MAX_FEE);
     assertEq(fresh.getLiquidBufferBps(), LIQUID_BUFFER_BPS);
-    assertEq(fresh.getPausedAt(), 0);
     assertFalse(fresh.paused());
 
     assertTrue(fresh.hasRole(fresh.DEFAULT_ADMIN_ROLE(), admin));

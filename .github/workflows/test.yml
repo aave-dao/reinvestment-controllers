@@ -22,12 +22,8 @@ jobs:
           persist-credentials: false
           submodules: recursive
 
-      # The gas snapshots use `vm.snapshotGasLastFrame`, which the stable line does not yet
-      # implement. The rolling `nightly` tag is stale, so a dated nightly is pinned instead.
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: nightly-f5868f92c9ed1c5e4673a07d7703adc581d9dc0c
 
       - name: Show Forge version
         run: forge --version

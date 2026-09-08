@@ -75,12 +75,7 @@ forge build
 forge test
 ```
 
-The gas snapshots in `tests/gas` call `vm.snapshotGasLastFrame`, which the stable line does not
-yet implement. The rolling `nightly` tag is stale and resolves to a build that predates it, so
-install a dated nightly — this is the same build CI pins:
-
-```shell
-foundryup --install nightly-f5868f92c9ed1c5e4673a07d7703adc581d9dc0c
-```
+The gas snapshots in `tests/gas` call `vm.snapshotGasLastFrame`, which needs a recent Foundry.
+If it reports an unknown cheatcode, update with `foundryup`.
 
 Fork tests run against mainnet and need `RPC_MAINNET` set in `.env`.

@@ -25,6 +25,7 @@ contract ReinvestmentControllerInvariantsTest is ReinvestmentControllerTestBase 
     vm.prank(keeper);
     usdc.approve(address(controller), type(uint256).max);
 
+    minter.setMintBeforeBurn();
     _invest(INVESTABLE);
 
     handler = new ReinvestmentControllerHandler(
@@ -34,7 +35,8 @@ contract ReinvestmentControllerInvariantsTest is ReinvestmentControllerTestBase 
       usdc,
       admin,
       keeper,
-      pauser
+      pauser,
+      keeperPrivateKey
     );
 
     bytes4[] memory selectors = new bytes4[](4);
@@ -45,6 +47,17 @@ contract ReinvestmentControllerInvariantsTest is ReinvestmentControllerTestBase 
 
     targetContract(address(handler));
     targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
+  }
+
+  function invariant_successfulDivestsCanSettleTheirSignedBurns() public view {
+    assertEq(handler.burnAfterDivestFailures(), 0);
+  }
+
+  function test_divest_preservesSignedBurn(uint256 amount) public {
+    amount = bound(amount, INVESTABLE / 2, INVESTABLE - INVARIANT_MAX_FEE);
+    handler.divest(amount, INVARIANT_MAX_FEE);
+    assertEq(handler.successfulDivests(), 1);
+    invariant_successfulDivestsCanSettleTheirSignedBurns();
   }
 
   function invariant_accountedAssetsArePhysicallyHeld() public view {

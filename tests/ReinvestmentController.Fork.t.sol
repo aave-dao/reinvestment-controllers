@@ -191,6 +191,29 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
     assertEq(IGatewayWallet(GATEWAY_WALLET).availableBalance(USDC, address(controller)), 0);
   }
 
+  function test_divest_settlesBurnAfterReclaim() public {
+    uint256 invested = controller.getInvestableAmount();
+    vm.prank(keeper);
+    controller.invest(invested);
+
+    uint256 amount = invested - MAX_FEE;
+    bytes memory intent = _encodeBurnIntent(_defaultTransferSpec(amount), MAX_FEE);
+    (bytes32 digest, bytes memory burnSignature) = _signBurnIntent(keeperPrivateKey, intent);
+    assertEq(
+      controller.isValidSignature(digest, burnSignature),
+      IERC1271.isValidSignature.selector
+    );
+
+    (bytes memory attestation, bytes memory signature) = _attest(amount);
+    vm.prank(keeper);
+    controller.divest(amount, attestation, signature);
+
+    assertEq(IHub(HUB).getAssetSwept(assetId), 0);
+    assertEq(IGatewayWallet(GATEWAY_WALLET).availableBalance(USDC, address(controller)), invested);
+    _burnSignedIntent(intent, burnSignature, MAX_FEE);
+    assertEq(IGatewayWallet(GATEWAY_WALLET).availableBalance(USDC, address(controller)), 0);
+  }
+
   /// @dev Circle charges a flat fee equal to MAX_FEE today, so this covers the hypothetical where
   /// it charges less. The Hub is made whole either way; the difference stays in the Gateway
   function test_divest_circleChargesBelowMaxFee() public {
@@ -432,6 +455,10 @@ contract ReinvestmentControllerForkTest is Test, GatewayPayloads {
     bytes memory intent = _encodeBurnIntent(_defaultTransferSpec(amount), MAX_FEE);
     (, bytes memory signature) = _signBurnIntent(keeperPrivateKey, intent);
 
+    _burnSignedIntent(intent, signature, fee);
+  }
+
+  function _burnSignedIntent(bytes memory intent, bytes memory signature, uint256 fee) internal {
     bytes[] memory intents = new bytes[](1);
     intents[0] = intent;
 

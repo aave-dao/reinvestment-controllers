@@ -4,6 +4,10 @@ pragma solidity 0.8.29;
 import {CommonBase} from 'forge-std/Base.sol';
 import {StdCheats} from 'forge-std/StdCheats.sol';
 import {StdUtils} from 'forge-std/StdUtils.sol';
+import {IERC1271} from '@openzeppelin/contracts/interfaces/IERC1271.sol';
+import {MessageHashUtils} from '@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol';
+import {BurnIntentLib} from '@circle-gateway/src/lib/BurnIntentLib.sol';
+import {TransferSpec} from '@circle-gateway/src/lib/TransferSpec.sol';
 import {Math} from '@openzeppelin/contracts/utils/math/Math.sol';
 
 import {ReinvestmentController} from '../../src/ReinvestmentController.sol';
@@ -26,7 +30,11 @@ contract ReinvestmentControllerHandler is CommonBase, StdCheats, StdUtils, Gatew
   address internal immutable KEEPER;
   address internal immutable PAUSER;
 
+  uint256 internal immutable KEEPER_PRIVATE_KEY;
+
   uint256 public fullExitFailures;
+  uint256 public burnAfterDivestFailures;
+  uint256 public successfulDivests;
 
   constructor(
     ReinvestmentController controller,
@@ -35,7 +43,8 @@ contract ReinvestmentControllerHandler is CommonBase, StdCheats, StdUtils, Gatew
     MockUSDC usdc,
     address admin,
     address keeper,
-    address pauser
+    address pauser,
+    uint256 keeperPrivateKey
   ) {
     CONTROLLER = controller;
     HUB = hub;
@@ -45,6 +54,7 @@ contract ReinvestmentControllerHandler is CommonBase, StdCheats, StdUtils, Gatew
     ADMIN = admin;
     KEEPER = keeper;
     PAUSER = pauser;
+    KEEPER_PRIVATE_KEY = keeperPrivateKey;
 
     _setPayloadContext(
       address(wallet),
@@ -84,9 +94,36 @@ contract ReinvestmentControllerHandler is CommonBase, StdCheats, StdUtils, Gatew
 
     amount = bound(amount, 1, divestable);
 
-    MINTER.setNextFee(actualFee);
+    _divestAndBurn(amount, actualFee, maxFee);
+  }
+
+  function _divestAndBurn(uint256 amount, uint256 actualFee, uint256 maxFee) internal {
+    TransferSpec memory spec = _defaultTransferSpec(amount);
+    bytes memory intent = _encodeBurnIntent(spec, maxFee);
+    bytes32 digest = MessageHashUtils.toTypedDataHash(
+      WALLET.domainSeparator(),
+      BurnIntentLib.getTypedDataHash(intent)
+    );
+    (uint8 v, bytes32 r, bytes32 s) = vm.sign(KEEPER_PRIVATE_KEY, digest);
+    bytes memory signature = abi.encode(abi.encodePacked(r, s, v), intent);
+    require(CONTROLLER.isValidSignature(digest, signature) == IERC1271.isValidSignature.selector);
+
     vm.prank(KEEPER);
-    CONTROLLER.divest(amount, _encodeAttestation(_defaultTransferSpec(amount)), 'signature');
+    CONTROLLER.divest(amount, _encodeAttestation(spec), 'signature');
+    successfulDivests++;
+
+    // Circle submits the source burn after the destination mint has finalized.
+    try CONTROLLER.isValidSignature(digest, signature) returns (bytes4 result) {
+      if (result != IERC1271.isValidSignature.selector) {
+        burnAfterDivestFailures++;
+        return;
+      }
+    } catch {
+      burnAfterDivestFailures++;
+      return;
+    }
+    vm.prank(address(MINTER));
+    WALLET.gatewayBurn(address(USDC), address(CONTROLLER), amount, actualFee);
   }
 
   /// @dev A Gateway balance above what the Hub swept is a donation, or a fee {divest} pre-paid

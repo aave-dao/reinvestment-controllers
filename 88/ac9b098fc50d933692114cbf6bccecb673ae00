@@ -1,0 +1,31 @@
+tests/ReinvestmentController.Fork.t.sol
+  s_936921eefc3c96::t_a3805e7521a7fb 202-205
+  s_936921eefc3c96::t_26f1e107c697f1 194-201,206-216,458-461
+tests/mocks/MockGatewayMinter.sol
+  s_936921eefc3c96::t_03317aa81dcaad 32-34,63-64
+  s_936921eefc3c96::t_26f1e107c697f1 11,26,52-57
+  s_936921eefc3c96::t_1306c2d212d923 65-66
+tests/handlers/ReinvestmentControllerHandler.sol
+  s_936921eefc3c96::t_03317aa81dcaad 33-34
+  s_936921eefc3c96::t_38311195abb930 97-100
+  s_936921eefc3c96::t_26f1e107c697f1 7-10,36-37,46-47,57,101-110,112-126
+tests/ReinvestmentController.Invariants.t.sol
+  s_936921eefc3c96::t_26f1e107c697f1 28,38-39,52-61
+  s_936921eefc3c96::t_2e671fbcdee12c 62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "88ac9b098fc50d933692114cbf6bccecb673ae00",
+  "prompts": {},
+  "sessions": {
+    "s_936921eefc3c96": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0a626-e896-7092-8fa4-663e29ed1e78",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "AlbertoCentonze <11707683+AlbertoCentonze@users.noreply.github.com>"
+    }
+  }
+}

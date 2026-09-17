@@ -70,6 +70,35 @@ contract ReinvestmentControllerDivestTest is ReinvestmentControllerTestBase {
     assertEq(controller.getInvestedAmount(), INVESTED - 1_000e6);
   }
 
+  function test_divest_capsReclaimAfterMultipleDivests(uint256 actualFee) public {
+    uint256 maxFee = 1e6;
+    actualFee = bound(actualFee, 0, maxFee / 2);
+
+    _pause();
+    vm.prank(admin);
+    controller.setMaxFee(maxFee);
+    _unpause();
+    usdc.mint(keeper, 3 * maxFee);
+    vm.prank(keeper);
+    usdc.approve(address(controller), 3 * maxFee);
+
+    for (uint256 i; i < 2; ++i) {
+      minter.setNextFee(actualFee);
+      vm.prank(keeper);
+      controller.divest(100_000e6, _encodeAttestation(_defaultTransferSpec(100_000e6)), hex'1234');
+    }
+
+    uint256 remaining = hub.getAssetSwept(assetId);
+    assertGt(wallet.availableBalance(address(usdc), address(controller)), remaining);
+
+    minter.setNextFee(actualFee);
+    vm.prank(keeper);
+    controller.divest(remaining, _encodeAttestation(_defaultTransferSpec(remaining)), hex'1234');
+
+    assertEq(hub.getAssetSwept(assetId), 0);
+    assertEq(hub.getAssetLiquidity(assetId), SUPPLIED);
+  }
+
   function test_divest_restoresInvestableHeadroom() public {
     uint256 investableBefore = controller.getInvestableAmount();
 

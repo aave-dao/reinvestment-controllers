@@ -1,0 +1,10 @@
+{
+  "divest: full": "141642",
+  "divest: partial": "141642",
+  "divest: with fee": "159692",
+  "initiateWithdrawal": "91589",
+  "invest: first": "172908",
+  "invest: subsequent": "115447",
+  "isValidSignature": "55392",
+  "withdraw": "84220"
+}

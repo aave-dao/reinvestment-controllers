@@ -33,6 +33,10 @@ interface IGatewayWallet {
   /// @return The EIP-712 domain separator used for signing burn intent payloads
   function domainSeparator() external view returns (bytes32);
 
+  /// @notice Returns the Gateway domain this contract operates on
+  /// @return The Gateway domain identifier
+  function domain() external view returns (uint32);
+
   /// @notice The balance still usable to back a burn, and therefore a mint
   /// @dev Reduced by `initiateWithdrawal`, which moves the amount into
   /// {withdrawingBalance}, and by Circle's out-of-band burn of an attested intent

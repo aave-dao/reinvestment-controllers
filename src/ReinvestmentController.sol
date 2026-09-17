@@ -45,6 +45,9 @@ contract ReinvestmentController is
   IGatewayMinter public immutable GATEWAY_MINTER;
 
   /// @inheritdoc IReinvestmentController
+  uint32 public immutable DOMAIN;
+
+  /// @inheritdoc IReinvestmentController
   IHub public immutable HUB;
 
   /// @inheritdoc IReinvestmentController
@@ -105,6 +108,8 @@ contract ReinvestmentController is
     HUB = IHub(hub);
     USDC = IERC20(usdc);
     ASSET_ID = IHub(hub).getAssetId(usdc);
+    DOMAIN = IGatewayWallet(gatewayWallet).domain();
+    require(IGatewayMinter(gatewayMinter).domain() == DOMAIN, InvalidDomain());
 
     _disableInitializers();
   }
@@ -444,7 +449,18 @@ contract ReinvestmentController is
     bytes32 expectedToken = AddressLib._addressToBytes32(token);
     bytes32 self = AddressLib._addressToBytes32(address(this));
 
+    require(spec.getValue() > 0, InvalidAmount());
+    require(spec.getHookDataLength() == 0, InvalidHookData());
     require(spec.getSourceDomain() == spec.getDestinationDomain(), CrossChainTransferNotAllowed());
+    require(spec.getSourceDomain() == DOMAIN, InvalidDomain());
+    require(
+      spec.getSourceContract() == AddressLib._addressToBytes32(address(GATEWAY_WALLET)),
+      InvalidSourceContract()
+    );
+    require(
+      spec.getDestinationContract() == AddressLib._addressToBytes32(address(GATEWAY_MINTER)),
+      InvalidDestinationContract()
+    );
     require(spec.getSourceToken() == expectedToken, InvalidSourceToken());
     require(spec.getDestinationToken() == expectedToken, InvalidDestinationToken());
     require(spec.getSourceDepositor() == self, InvalidDepositor());

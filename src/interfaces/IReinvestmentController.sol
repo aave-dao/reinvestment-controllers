@@ -30,8 +30,17 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// @dev Invalid destination caller provided in transfer specification
   error InvalidDestinationCaller();
 
+  /// @dev Invalid destination contract provided in transfer specification
+  error InvalidDestinationContract();
+
   /// @dev Invalid destination token provided in transfer specification
   error InvalidDestinationToken();
+
+  /// @dev Transfer specification domain does not match the Gateway domain of this chain
+  error InvalidDomain();
+
+  /// @dev Transfer specification carries hook data, which is not supported
+  error InvalidHookData();
 
   /// @dev Invalid mint amount provided in attestation
   error InvalidMintAmount();
@@ -44,6 +53,9 @@ interface IReinvestmentController is IERC1271, IAccessControl {
 
   /// @dev Invalid signer provided in transfer specification
   error InvalidSigner();
+
+  /// @dev Invalid source contract provided in transfer specification
+  error InvalidSourceContract();
 
   /// @dev Invalid source token provided in transfer specification
   error InvalidSourceToken();
@@ -113,7 +125,7 @@ interface IReinvestmentController is IERC1271, IAccessControl {
 
   /// @notice Initializes the controller's roles and investment limits
   /// @dev Callable once, on a proxy. The implementation itself is locked at construction,
-  /// and the protocol addresses (GATEWAY_WALLET, GATEWAY_MINTER, HUB, USDC, ASSET_ID) are
+  /// and the protocol addresses (GATEWAY_WALLET, GATEWAY_MINTER, HUB, USDC, ASSET_ID, DOMAIN) are
   /// fixed there rather than
   /// here, so changing one requires deploying a new implementation and upgrading to it.
   /// @param admin The address granted both DEFAULT_ADMIN_ROLE and KEEPER_ROLE
@@ -239,6 +251,10 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// @return The address of the Gateway minter
   function GATEWAY_MINTER() external view returns (IGatewayMinter);
 
+  /// @notice Returns the Circle Gateway domain of this chain, read from the Gateway wallet
+  /// @return The Gateway domain
+  function DOMAIN() external view returns (uint32);
+
   /// @notice Returns the address of the Hub
   /// @return The address of the Hub
   function HUB() external view returns (IHub);
@@ -266,7 +282,8 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// stands as proof the check passed.
   /// The burn intent is re-hashed against the Gateway's domain separator and must match
   /// `hash`, the recovered signer must hold KEEPER_ROLE, and the intent itself must pass
-  /// the same-chain, token, counterparty and balance checks applied on submission.
+  /// the non-zero value, empty hook data, domain, Gateway contract, token, counterparty and
+  /// balance checks applied on submission.
   /// Reverts on any failure rather than returning a non-magic selector, so a call that
   /// returns at all returns `IERC1271.isValidSignature.selector`.
   /// @param hash The EIP-712 digest the Gateway expects to have been signed

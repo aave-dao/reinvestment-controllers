@@ -5,6 +5,7 @@ import {IERC1271} from '@openzeppelin/contracts/interfaces/IERC1271.sol';
 import {ECDSA} from '@openzeppelin/contracts/utils/cryptography/ECDSA.sol';
 import {PausableUpgradeable} from '@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol';
 import {TransferSpec} from '@circle-gateway/src/lib/TransferSpec.sol';
+import {TransferSpecLib} from '@circle-gateway/src/lib/TransferSpecLib.sol';
 
 import {IReinvestmentController} from '../src/interfaces/IReinvestmentController.sol';
 
@@ -28,7 +29,7 @@ contract ReinvestmentControllerIsValidSignatureTest is ReinvestmentControllerTes
   }
 
   function test_isValidSignature(uint256 value) public view {
-    value = bound(value, 0, INVESTED);
+    value = bound(value, 1, INVESTED);
     bytes memory intent = _encodeBurnIntent(_defaultTransferSpec(value));
     (bytes32 digest, bytes memory signature) = _signBurnIntent(keeperPrivateKey, intent);
 
@@ -209,6 +210,84 @@ contract ReinvestmentControllerIsValidSignatureTest is ReinvestmentControllerTes
     (bytes32 digest, bytes memory signature) = _signBurnIntent(keeperPrivateKey, intent);
 
     vm.expectRevert(IReinvestmentController.MaxFeeExceeded.selector);
+    controller.isValidSignature(digest, signature);
+  }
+
+  function test_isValidSignature_revertsWith_InvalidAmount_zeroValue() public {
+    TransferSpec memory spec = _defaultTransferSpec(0);
+
+    (bytes32 digest, bytes memory signature) = _signBurnIntent(
+      keeperPrivateKey,
+      _encodeBurnIntent(spec)
+    );
+
+    vm.expectRevert(IReinvestmentController.InvalidAmount.selector);
+    controller.isValidSignature(digest, signature);
+  }
+
+  function test_isValidSignature_revertsWith_InvalidHookData() public {
+    TransferSpec memory spec = _defaultTransferSpec(1_000e6);
+    spec.hookData = hex'01';
+
+    (bytes32 digest, bytes memory signature) = _signBurnIntent(
+      keeperPrivateKey,
+      _encodeBurnIntent(spec)
+    );
+
+    vm.expectRevert(IReinvestmentController.InvalidHookData.selector);
+    controller.isValidSignature(digest, signature);
+  }
+
+  function test_isValidSignature_revertsWith_InvalidTransferSpecVersion() public {
+    TransferSpec memory spec = _defaultTransferSpec(1_000e6);
+    spec.version = 2;
+
+    (bytes32 digest, bytes memory signature) = _signBurnIntent(
+      keeperPrivateKey,
+      _encodeBurnIntent(spec)
+    );
+
+    vm.expectRevert(abi.encodeWithSelector(TransferSpecLib.InvalidTransferSpecVersion.selector, 2));
+    controller.isValidSignature(digest, signature);
+  }
+
+  function test_isValidSignature_revertsWith_InvalidDomain() public {
+    TransferSpec memory spec = _defaultTransferSpec(1_000e6);
+    spec.sourceDomain = 1;
+    spec.destinationDomain = 1;
+
+    (bytes32 digest, bytes memory signature) = _signBurnIntent(
+      keeperPrivateKey,
+      _encodeBurnIntent(spec)
+    );
+
+    vm.expectRevert(IReinvestmentController.InvalidDomain.selector);
+    controller.isValidSignature(digest, signature);
+  }
+
+  function test_isValidSignature_revertsWith_InvalidSourceContract() public {
+    TransferSpec memory spec = _defaultTransferSpec(1_000e6);
+    spec.sourceContract = _toBytes32(makeAddr('otherWallet'));
+
+    (bytes32 digest, bytes memory signature) = _signBurnIntent(
+      keeperPrivateKey,
+      _encodeBurnIntent(spec)
+    );
+
+    vm.expectRevert(IReinvestmentController.InvalidSourceContract.selector);
+    controller.isValidSignature(digest, signature);
+  }
+
+  function test_isValidSignature_revertsWith_InvalidDestinationContract() public {
+    TransferSpec memory spec = _defaultTransferSpec(1_000e6);
+    spec.destinationContract = _toBytes32(makeAddr('otherMinter'));
+
+    (bytes32 digest, bytes memory signature) = _signBurnIntent(
+      keeperPrivateKey,
+      _encodeBurnIntent(spec)
+    );
+
+    vm.expectRevert(IReinvestmentController.InvalidDestinationContract.selector);
     controller.isValidSignature(digest, signature);
   }
 

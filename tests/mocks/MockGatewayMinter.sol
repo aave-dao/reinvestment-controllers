@@ -23,6 +23,8 @@ contract MockGatewayMinter {
 
   uint256 public nextFee;
 
+  uint32 public domain;
+
   constructor(address gatewayWallet) {
     GATEWAY_WALLET = MockGatewayWallet(gatewayWallet);
   }
@@ -56,5 +58,9 @@ contract MockGatewayMinter {
 
   function setNextFee(uint256 fee) external {
     nextFee = fee;
+  }
+
+  function setDomain(uint32 domain_) external {
+    domain = domain_;
   }
 }

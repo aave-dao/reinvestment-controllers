@@ -9,4 +9,8 @@ interface IGatewayMinter {
   /// @param attestationPayload The byte-encoded attestation(s)
   /// @param signature The signature from a valid attestation signer on `attestationPayload`
   function gatewayMint(bytes memory attestationPayload, bytes memory signature) external;
+
+  /// @notice Returns the Gateway domain this contract operates on
+  /// @return The Gateway domain identifier
+  function domain() external view returns (uint32);
 }

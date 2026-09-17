@@ -4,6 +4,7 @@ pragma solidity 0.8.29;
 import {IAccessControl} from '@openzeppelin/contracts/access/IAccessControl.sol';
 import {PausableUpgradeable} from '@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol';
 import {TransferSpec} from '@circle-gateway/src/lib/TransferSpec.sol';
+import {TransferSpecLib} from '@circle-gateway/src/lib/TransferSpecLib.sol';
 
 import {IReinvestmentController} from '../src/interfaces/IReinvestmentController.sol';
 
@@ -172,6 +173,52 @@ contract ReinvestmentControllerDivestTest is ReinvestmentControllerTestBase {
     vm.expectRevert(IReinvestmentController.InvalidMintAmount.selector);
     vm.prank(keeper);
     controller.divest(1_000e6, _encodeAttestation(_defaultTransferSpec(2_000e6)), hex'1234');
+  }
+
+  function test_divest_revertsWith_InvalidHookData() public {
+    TransferSpec memory spec = _defaultTransferSpec(1_000e6);
+    spec.hookData = hex'01';
+
+    vm.expectRevert(IReinvestmentController.InvalidHookData.selector);
+    vm.prank(keeper);
+    controller.divest(1_000e6, _encodeAttestation(spec), hex'1234');
+  }
+
+  function test_divest_revertsWith_InvalidTransferSpecVersion() public {
+    TransferSpec memory spec = _defaultTransferSpec(1_000e6);
+    spec.version = 2;
+
+    vm.expectRevert(abi.encodeWithSelector(TransferSpecLib.InvalidTransferSpecVersion.selector, 2));
+    vm.prank(keeper);
+    controller.divest(1_000e6, _encodeAttestation(spec), hex'1234');
+  }
+
+  function test_divest_revertsWith_InvalidDomain() public {
+    TransferSpec memory spec = _defaultTransferSpec(1_000e6);
+    spec.sourceDomain = 1;
+    spec.destinationDomain = 1;
+
+    vm.expectRevert(IReinvestmentController.InvalidDomain.selector);
+    vm.prank(keeper);
+    controller.divest(1_000e6, _encodeAttestation(spec), hex'1234');
+  }
+
+  function test_divest_revertsWith_InvalidSourceContract() public {
+    TransferSpec memory spec = _defaultTransferSpec(1_000e6);
+    spec.sourceContract = _toBytes32(makeAddr('otherWallet'));
+
+    vm.expectRevert(IReinvestmentController.InvalidSourceContract.selector);
+    vm.prank(keeper);
+    controller.divest(1_000e6, _encodeAttestation(spec), hex'1234');
+  }
+
+  function test_divest_revertsWith_InvalidDestinationContract() public {
+    TransferSpec memory spec = _defaultTransferSpec(1_000e6);
+    spec.destinationContract = _toBytes32(makeAddr('otherMinter'));
+
+    vm.expectRevert(IReinvestmentController.InvalidDestinationContract.selector);
+    vm.prank(keeper);
+    controller.divest(1_000e6, _encodeAttestation(spec), hex'1234');
   }
 
   function test_divest_revertsWith_CrossChainTransferNotAllowed() public {

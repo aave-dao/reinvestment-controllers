@@ -34,6 +34,8 @@ contract MockGatewayWallet {
 
   address public gatewayMinter;
 
+  uint32 public domain;
+
   mapping(address token => mapping(address depositor => uint256)) internal _availableBalances;
   mapping(address token => mapping(address depositor => uint256)) internal _withdrawingBalances;
   mapping(address token => mapping(address depositor => uint256)) internal _withdrawalBlocks;

@@ -17,6 +17,7 @@ contract ReinvestmentControllerConstructorTest is ReinvestmentControllerTestBase
     assertEq(address(implementation.HUB()), address(hub));
     assertEq(address(implementation.USDC()), address(usdc));
     assertEq(implementation.ASSET_ID(), hub.USDC_ASSET_ID());
+    assertEq(implementation.DOMAIN(), wallet.domain());
   }
 
   function test_constructor_definesDistinctRoleIdentifiers() public view {
@@ -68,6 +69,13 @@ contract ReinvestmentControllerConstructorTest is ReinvestmentControllerTestBase
   function test_constructor_revertsWith_InvalidZeroAddress_usdc() public {
     vm.expectRevert(IReinvestmentController.InvalidZeroAddress.selector);
     new ReinvestmentController(address(wallet), address(minter), address(hub), address(0));
+  }
+
+  function test_constructor_revertsWith_InvalidDomain_minterDomainMismatch() public {
+    minter.setDomain(1);
+
+    vm.expectRevert(IReinvestmentController.InvalidDomain.selector);
+    new ReinvestmentController(address(wallet), address(minter), address(hub), address(usdc));
   }
 
   function test_constructor_revertsWith_AssetNotListed_underlyingUnknownToHub() public {

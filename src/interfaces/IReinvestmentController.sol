@@ -174,9 +174,10 @@ interface IReinvestmentController is IERC1271, IAccessControl {
 
   /// @notice Initiates an on-chain withdrawal of the Gateway balance, capped at the swept amount
   /// @dev Only while paused, so no new burn intent validates and no attestation is consumed
-  /// against the balance being moved. It does not stop a burn Circle has already vouched for, as
-  /// the Gateway draws a burn from the withdrawing balance once the available one is exhausted.
-  /// The available balance can exceed what the Hub swept, either
+  /// against the balance being moved. A burn whose mint finalized before the pause may still land
+  /// during the withdrawal delay. Capping the withdrawal at `swept` leaves exactly that pending burn
+  /// in the available balance, so it only reaches the withdrawing balance if Circle charges more
+  /// than {divest} pre-paid, as after lowering {maxFee} without draining first. The available balance can exceed what the Hub swept, either
   /// through a third-party `depositFor`, which is permissionless, or through {divest} pre-paying
   /// a fee higher than Circle charged. Neither is reclaimable, since the Hub can only take back
   /// what it swept, so the excess is left in the Gateway
@@ -187,11 +188,12 @@ interface IReinvestmentController is IERC1271, IAccessControl {
 
   /// @notice Halts {invest}, {divest} and {isValidSignature}
   /// @dev Blocking {isValidSignature} stops new burn intents from validating, and blocking {divest}
-  /// stops attestations from being consumed. It cannot cancel a burn Circle has already vouched
-  /// for: the Gateway does not call {isValidSignature} at burn time, but accepts a registered TEE
-  /// signer's signature as proof the TEE validated the intent against a quorum of RPCs. RPC lag may
-  /// also let the TEE briefly approve against pre-pause state. Withdrawal paths stay open so funds
-  /// can always be returned to the Hub
+  /// stops attestations from being consumed. Circle burns only after observing a mint of the
+  /// intent in a finalized block, and every mint goes through {divest}, so pausing also holds back
+  /// the burn of any intent not yet minted. A burn whose mint already finalized still lands, which
+  /// settles accounting {divest} already recorded. The Gateway accepts the TEE's signature at burn
+  /// time without calling {isValidSignature} again, and RPC lag may let the TEE briefly approve
+  /// against pre-pause state. Withdrawal paths stay open so funds can always be returned to the Hub
   function pause() external;
 
   /// @notice Resumes {invest}, {divest} and {isValidSignature}

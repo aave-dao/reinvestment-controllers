@@ -58,9 +58,8 @@ The Gateway is Circle's. We depend on them for:
 - **Attestations.** Minting requires a payload signed by an attestation signer. The signer
   set is controlled by the minter's owner, and attestations are obtained off-chain via
   Circle's API. Transaction size limit is imposed by the API.
-- **Burns.** After attesting a burn intent, Circle debits the wallet balance out-of-band.
-  The controller cannot trigger or observe it, so a divest mints without a matching burn
-  from our side.
+- **Burns.** Circle burns an intent only after observing its mint in a finalized block, so a
+  burn always follows a `divest`. The controller cannot observe or enforce this ordering.
 - **Withdrawal delay.** The on-chain exit delay is the wallet's `withdrawalDelay`, owner
   controlled. The controller does not enforce its own.
 - **Pausing and denylisting.** Circle can pause either contract, denylist the controller,
@@ -79,11 +78,13 @@ A pause or a `KEEPER_ROLE` revocation cannot invalidate a signature Circle's TEE
 issued. `isValidSignature` is not called again at burn time: `gatewayBurn` accepts a registered
 TEE signer's signature as proof the TEE validated the intent against a quorum of RPCs. RPC lag
 also means the TEE may briefly approve against pre-pause state. This is inherent to Gateway's
-ERC-1271 support. A pause stops new validations and stops attestations being consumed through
-`divest`, but it cannot cancel a burn the TEE has already vouched for. Burns
-also draw on the withdrawing balance once the available one is exhausted, so
-`initiateWithdrawal` does not cancel them either. The same applies to intents signed before a
-`setMaxFee` change.
+ERC-1271 support. Because Circle burns only after a finalized mint, and every mint goes through
+`divest`, a pause also holds back the burn of any intent not yet minted; it resumes once
+unpaused. A burn whose mint already finalized still lands, which settles accounting `divest`
+already recorded. During an on-chain exit, `initiateWithdrawal` caps at `swept`, which leaves
+exactly that pending burn in the available balance. Intents signed
+before a `setMaxFee` change stay mintable after unpause, which is why the cap must be drained
+before it is lowered.
 
 ## Usage
 

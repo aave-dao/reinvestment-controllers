@@ -237,7 +237,7 @@ contract ReinvestmentController is
   }
 
   /// @inheritdoc IReinvestmentController
-  function setMaxFee(uint256 maxFee_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+  function setMaxFee(uint256 maxFee_) external onlyRole(DEFAULT_ADMIN_ROLE) whenPaused {
     _setMaxFee(maxFee_);
   }
 

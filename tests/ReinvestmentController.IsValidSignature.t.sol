@@ -43,8 +43,7 @@ contract ReinvestmentControllerIsValidSignatureTest is ReinvestmentControllerTes
   }
 
   function test_isValidSignature_withFeeAtTheConfiguredMaximum() public {
-    vm.prank(admin);
-    controller.setMaxFee(FEE);
+    _setMaxFee(FEE);
 
     bytes memory intent = _encodeBurnIntent(_defaultTransferSpec(1_000e6), FEE);
     (bytes32 digest, bytes memory signature) = _signBurnIntent(keeperPrivateKey, intent);
@@ -186,8 +185,7 @@ contract ReinvestmentControllerIsValidSignatureTest is ReinvestmentControllerTes
   function test_isValidSignature_revertsWith_BurnIntentExceedsBalance_valuePlusFeeAboveSwept()
     public
   {
-    vm.prank(admin);
-    controller.setMaxFee(FEE);
+    _setMaxFee(FEE);
 
     bytes memory intent = _encodeBurnIntent(_defaultTransferSpec(INVESTED), 1);
     (bytes32 digest, bytes memory signature) = _signBurnIntent(keeperPrivateKey, intent);
@@ -205,8 +203,7 @@ contract ReinvestmentControllerIsValidSignatureTest is ReinvestmentControllerTes
   }
 
   function test_isValidSignature_revertsWith_MaxFeeExceeded_aboveConfiguredMaxFee() public {
-    vm.prank(admin);
-    controller.setMaxFee(FEE);
+    _setMaxFee(FEE);
 
     bytes memory intent = _encodeBurnIntent(_defaultTransferSpec(1_000e6), FEE + 1);
     (bytes32 digest, bytes memory signature) = _signBurnIntent(keeperPrivateKey, intent);

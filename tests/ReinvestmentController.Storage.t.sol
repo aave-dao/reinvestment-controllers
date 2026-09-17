@@ -27,8 +27,7 @@ contract ReinvestmentControllerStorageTest is ReinvestmentControllerTestBase {
     vm.prank(keeper);
     controller.invest(1_000e6);
 
-    vm.prank(admin);
-    controller.setMaxFee(1e6);
+    _setMaxFee(1e6);
 
     assertEq(_load(INVEST_MIN_DELAY_OFFSET), controller.getInvestMinDelay());
     assertEq(_load(LAST_INVEST_TIMESTAMP_OFFSET), controller.getLastInvestTimestamp());

@@ -3,6 +3,7 @@ pragma solidity 0.8.29;
 
 import {IAccessControl} from '@openzeppelin/contracts/access/IAccessControl.sol';
 import {IERC1271} from '@openzeppelin/contracts/interfaces/IERC1271.sol';
+import {PausableUpgradeable} from '@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol';
 
 import {IReinvestmentController} from '../src/interfaces/IReinvestmentController.sol';
 
@@ -16,6 +17,7 @@ contract ReinvestmentControllerSetMaxFeeTest is ReinvestmentControllerTestBase {
     super.setUp();
 
     _invest(INVESTED);
+    _pause();
   }
 
   function test_setMaxFee() public {
@@ -38,6 +40,7 @@ contract ReinvestmentControllerSetMaxFeeTest is ReinvestmentControllerTestBase {
   function test_setMaxFee_admitsABurnIntentAtTheNewMaximum() public {
     vm.prank(admin);
     controller.setMaxFee(NEW_MAX_FEE);
+    _unpause();
 
     bytes memory intent = _encodeBurnIntent(_defaultTransferSpec(1_000e6), NEW_MAX_FEE);
     (bytes32 digest, bytes memory signature) = _signBurnIntent(keeperPrivateKey, intent);
@@ -50,6 +53,7 @@ contract ReinvestmentControllerSetMaxFeeTest is ReinvestmentControllerTestBase {
     controller.setMaxFee(NEW_MAX_FEE);
     controller.setMaxFee(0);
     vm.stopPrank();
+    _unpause();
 
     bytes memory intent = _encodeBurnIntent(_defaultTransferSpec(1_000e6), 1);
     (bytes32 digest, bytes memory signature) = _signBurnIntent(keeperPrivateKey, intent);
@@ -63,6 +67,7 @@ contract ReinvestmentControllerSetMaxFeeTest is ReinvestmentControllerTestBase {
   function test_setMaxFee_appliesToDivest() public {
     vm.prank(admin);
     controller.setMaxFee(NEW_MAX_FEE);
+    _unpause();
 
     usdc.mint(keeper, NEW_MAX_FEE);
     vm.prank(keeper);
@@ -79,6 +84,14 @@ contract ReinvestmentControllerSetMaxFeeTest is ReinvestmentControllerTestBase {
     assertEq(usdc.balanceOf(keeper), 0);
     assertEq(controller.getInvestedAmount(), INVESTED - amount - NEW_MAX_FEE);
     assertEq(hub.getAssetLiquidity(assetId), SUPPLIED - INVESTED + amount + NEW_MAX_FEE);
+  }
+
+  function test_setMaxFee_revertsWith_ExpectedPause() public {
+    _unpause();
+
+    vm.expectRevert(PausableUpgradeable.ExpectedPause.selector);
+    vm.prank(admin);
+    controller.setMaxFee(NEW_MAX_FEE);
   }
 
   function test_setMaxFee_revertsWith_AccessControlUnauthorizedAccount() public {

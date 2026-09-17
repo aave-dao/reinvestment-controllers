@@ -161,9 +161,10 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   ) external;
 
   /// @notice Initiates an on-chain withdrawal of the Gateway balance, capped at the swept amount
-  /// @dev Only while paused, so no attestation or burn intent can be live against the balance
-  /// being moved. Moving it out of the Gateway's available bucket is itself what stops any
-  /// further burn from succeeding. The available balance can exceed what the Hub swept, either
+  /// @dev Only while paused, so no new burn intent validates and no attestation is consumed
+  /// against the balance being moved. It does not stop a burn Circle has already vouched for, as
+  /// the Gateway draws a burn from the withdrawing balance once the available one is exhausted.
+  /// The available balance can exceed what the Hub swept, either
   /// through a third-party `depositFor`, which is permissionless, or through {divest} pre-paying
   /// a fee higher than Circle charged. Neither is reclaimable, since the Hub can only take back
   /// what it swept, so the excess is left in the Gateway
@@ -173,8 +174,12 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   function withdraw() external;
 
   /// @notice Halts {invest}, {divest} and {isValidSignature}
-  /// @dev Blocking {isValidSignature} stops the Gateway from burning against this contract's
-  /// balance while paused. Withdrawal paths stay open so funds can always be returned to the Hub
+  /// @dev Blocking {isValidSignature} stops new burn intents from validating, and blocking {divest}
+  /// stops attestations from being consumed. It cannot cancel a burn Circle has already vouched
+  /// for: the Gateway does not call {isValidSignature} at burn time, but accepts a registered TEE
+  /// signer's signature as proof the TEE validated the intent against a quorum of RPCs. RPC lag may
+  /// also let the TEE briefly approve against pre-pause state. Withdrawal paths stay open so funds
+  /// can always be returned to the Hub
   function pause() external;
 
   /// @notice Resumes {invest}, {divest} and {isValidSignature}
@@ -193,15 +198,17 @@ interface IReinvestmentController is IERC1271, IAccessControl {
 
   /// @notice Sets the maximum fee that can be paid to the Gateway operator on a withdrawal
   /// Can be set to 0 to reject any fee-bearing withdrawal
-  /// @dev To lower the cap: let outstanding intents settle through {divest} first, then pause,
-  /// then lower. That order matters, as {divest} is itself `whenNotPaused`, so pausing first
-  /// blocks the settlement that has to happen. Pausing once drained blocks {isValidSignature},
-  /// so no new intent can be signed under the old cap while the change lands.
-  /// {isValidSignature} checks the cap at signing time, but a signed intent stays valid at the
-  /// Gateway afterwards, so a lower cap makes {divest} pre-pay less than Circle can still
-  /// charge against an intent signed under the old one. {divest} cannot detect this, as an
-  /// attestation carries no fee field. Raising the cap needs none of this: it only makes
-  /// {divest} over-pay, which cannot leave the Hub's `swept` overstated
+  /// @dev Only while paused. {divest} pre-pays the current {maxFee}, but Circle charges up to the
+  /// `maxFee` of the burn intent it attested, which {isValidSignature} checked against the cap at
+  /// signing time. An attestation carries no fee field, so {divest} cannot detect a cap that moved
+  /// in between. Pausing stops new intents validating and stops {divest} consuming attestations
+  /// while the change lands
+  /// @dev Pausing does not invalidate intents already attested. To lower the cap: let outstanding
+  /// intents settle through {divest} first, then pause, then lower. That order matters, as {divest}
+  /// is itself `whenNotPaused`, so pausing first blocks the settlement that has to happen. A lower
+  /// cap otherwise makes {divest} pre-pay less than Circle can still charge against an intent
+  /// signed under the old one. Raising the cap needs no draining: it only makes {divest}
+  /// over-pay, which cannot leave the Hub's `swept` overstated
   /// @param maxFee_ The new maximum fee (in absolute terms)
   function setMaxFee(uint256 maxFee_) external;
 
@@ -253,8 +260,10 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   function getInvestedAmount() external view returns (uint256);
 
   /// @notice Validates an ERC-1271 signature over a Circle Gateway burn intent
-  /// @dev Called by the Gateway to confirm this contract authorized a withdrawal, as the
-  /// contract is the depositor, recipient and signer of every burn intent it submits.
+  /// @dev Called off-chain by Circle's TEE, against a quorum of RPCs, to confirm this contract
+  /// authorized a withdrawal, as the contract is the depositor, recipient and signer of every burn
+  /// intent it submits. The Gateway does not call it again at burn time, as the TEE's signature
+  /// stands as proof the check passed.
   /// The burn intent is re-hashed against the Gateway's domain separator and must match
   /// `hash`, the recovered signer must hold KEEPER_ROLE, and the intent itself must pass
   /// the same-chain, token, counterparty and balance checks applied on submission.

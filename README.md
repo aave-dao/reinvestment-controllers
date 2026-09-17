@@ -35,6 +35,13 @@ the opposite of the phantom-asset case above, and the safe direction. `initiateW
 its withdrawal at `swept`, so neither that residue nor a third-party `depositFor` donation can
 block the exit.
 
+`setMaxFee` only works while paused. `divest` pre-pays the cap in force when it runs, but
+Circle charges against the cap in force when the burn intent was signed, and nothing on-chain
+links the two. Pausing stops new validations and stops `divest` consuming attestations while
+the cap changes, but it does not cancel intents already attested (see Trust assumptions). To
+lower the cap, let outstanding intents settle through `divest` first, then pause and lower.
+Raising it needs no draining, since it only over-funds the Hub.
+
 The attestation names **the controller** as `destinationRecipient`, not the Hub. Minting
 straight to the Hub would remove the transfer, but `Hub.reclaim` only checks that the Hub's
 aggregate balance covers `liquidity + amount` — a floor any USDC sitting there satisfies,
@@ -67,6 +74,16 @@ On the Aave side, only governance can attach or detach the controller, via
 Note that `isValidSignature` is a view function and cannot record what it has signed for.
 Multiple burn intents are each validated against the same balance; the wallet's own
 accounting is what prevents over-burning.
+
+A pause or a `KEEPER_ROLE` revocation cannot invalidate a signature Circle's TEE has already
+issued. `isValidSignature` is not called again at burn time: `gatewayBurn` accepts a registered
+TEE signer's signature as proof the TEE validated the intent against a quorum of RPCs. RPC lag
+also means the TEE may briefly approve against pre-pause state. This is inherent to Gateway's
+ERC-1271 support. A pause stops new validations and stops attestations being consumed through
+`divest`, but it cannot cancel a burn the TEE has already vouched for. Burns
+also draw on the withdrawing balance once the available one is exhausted, so
+`initiateWithdrawal` does not cancel them either. The same applies to intents signed before a
+`setMaxFee` change.
 
 ## Usage
 

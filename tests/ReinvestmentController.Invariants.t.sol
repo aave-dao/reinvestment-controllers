@@ -18,8 +18,7 @@ contract ReinvestmentControllerInvariantsTest is ReinvestmentControllerTestBase 
   function setUp() public override {
     super.setUp();
 
-    vm.prank(admin);
-    controller.setMaxFee(INVARIANT_MAX_FEE);
+    _setMaxFee(INVARIANT_MAX_FEE);
 
     usdc.mint(keeper, KEEPER_FEE_FUNDING);
     vm.prank(keeper);

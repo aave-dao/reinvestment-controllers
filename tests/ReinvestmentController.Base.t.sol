@@ -113,6 +113,18 @@ abstract contract ReinvestmentControllerTestBase is Test, GatewayPayloads {
     controller.pause();
   }
 
+  function _unpause() internal {
+    vm.prank(admin);
+    controller.unpause();
+  }
+
+  function _setMaxFee(uint256 maxFee) internal {
+    _pause();
+    vm.prank(admin);
+    controller.setMaxFee(maxFee);
+    _unpause();
+  }
+
   function _signBurnIntent(
     uint256 privateKey,
     bytes memory burnIntentPayload

@@ -39,8 +39,7 @@ contract ReinvestmentControllerDivestGasTest is ReinvestmentControllerTestBase {
   function test_divest_withFee() public {
     uint256 amount = INVESTED / 2;
     uint256 fee = 1e6;
-    vm.prank(admin);
-    controller.setMaxFee(fee);
+    _setMaxFee(fee);
     minter.setNextFee(fee);
     usdc.mint(keeper, fee);
     vm.prank(keeper);

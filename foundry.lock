@@ -3,7 +3,7 @@
     "rev": "cdacec509e4f848bff1a5556f503afa83eee3b79"
   },
   "lib/evm-gateway-contracts": {
-    "rev": "ee628dc35ee67bc8ad30ba0606cc70888688a3f1"
+    "rev": "fd51093c7a1ba8e50ea2c6029ebf1bdc2bb2b8e8"
   },
   "lib/forge-std": {
     "tag": {

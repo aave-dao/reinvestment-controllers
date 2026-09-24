@@ -51,6 +51,32 @@ proven by its own balance rather than by a balance coincidence at the Hub. It al
 `_validateTransferSpec` pinning depositor, recipient, signer and destination caller all to
 `self`, which is what makes the spec check easy to audit.
 
+## Dust
+
+Because of the fee accounting mentioned above, dust is left at the Gateway.
+The accounting matches holdings exactly while Circle's fee matches `maxFee`.
+Two things can push the Gateway balance above that: Circle charging less than the
+cap, or a third party calling `depositFor` on the controller. Either way
+the excess is real USDC the Hub has never counted, and no existing path can reach it.
+`divest` and `isValidSignature` both bound their intents by `swept`, so a burn intent
+for the surplus can never be attested, and `initiateWithdrawal` caps at `swept` by
+design. Once the Hub is fully divested and `swept` is zero, every exit is closed and
+the residue is stranded.
+
+`initiateDustWithdrawal` and `claimDust` reopen it through the on-chain exit, which
+needs no attestation and so is untouched by the `swept` bound in `isValidSignature`.
+The amount withdrawn is `available - swept`, never more, so principal is out of reach
+by construction: the pair only ever moves what sits above the Hub's claim, the same
+line `initiateWithdrawal` refuses to cross from the other side. Both require the
+controller to be paused, which freezes `swept` for the duration of the Gateway's
+withdrawal delay.
+
+The dust is forwarded to a recipient, not reclaimed to the Hub. Reclaiming it would
+add USDC to `swept` that was never supplied, inflating `totalAddedAssets` with assets
+no supplier is owed — the phantom-asset direction the fee accounting exists to avoid.
+Residue that was never principal does not re-enter Hub accounting. This way treasury
+can reclaim the excess fees it paid if it is the recipient.
+
 ## Trust assumptions
 
 The Gateway is Circle's. We depend on them for:

@@ -75,11 +75,23 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// @dev Amount to be deposited cannot exceed the configured exposure caps
   error ExposureCapExceeded();
 
+  /// @notice Thrown when there is no Gateway balance in excess of the swept amount
+  error NoDust();
+
   /// @dev No pending on-chain withdrawal
   error NoWithdrawalInProcess();
 
   /// @dev An existing withdrawal is already in process
   error WithdrawalInProcess();
+
+  /// @dev Emitted when dust is recovered from Gateway
+  /// @param recipient Address receiving the dust
+  /// @param amount The amount of dust transferred
+  event ClaimedDust(address indexed recipient, uint256 amount);
+
+  /// @notice Emitted when a dust withdrawal is initiated at the Gateway
+  /// @param amount The amount of dust being withdrawn
+  event DustWithdrawalInitiated(uint256 amount);
 
   /// @dev Emitted when funds are invested
   /// @param amount The amount of funds invested
@@ -185,6 +197,17 @@ interface IReinvestmentController is IERC1271, IAccessControl {
 
   /// @notice Finalizes a pending withdrawal after required time has elapsed
   function withdraw() external;
+
+  /// @notice Initiates a claim on dust held on the Gateway
+  /// As the contract potentially overpays fees if they are lower than max fee, a certain amount accumulates on the
+  /// Gateway that can only be claimed by this function, as the other paths use the HUB.reclaim() functionality and
+  /// check the accounting against that balance.
+  function initiateDustWithdrawal() external;
+
+  /// @notice Completes a pending dust withdrawal and forwards it to `recipient`. The dust is
+  /// not reclaimed to the Hub, as it was never counted as swept.
+  /// @param recipient The address to receive the dust
+  function claimDust(address recipient) external;
 
   /// @notice Halts {invest}, {divest} and {isValidSignature}
   /// @dev Blocking {isValidSignature} stops new burn intents from validating, and blocking {divest}

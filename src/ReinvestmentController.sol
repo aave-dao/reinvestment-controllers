@@ -217,6 +217,38 @@ contract ReinvestmentController is
   }
 
   /// @inheritdoc IReinvestmentController
+  function initiateDustWithdrawal() external onlyRole(DEFAULT_ADMIN_ROLE) whenPaused {
+    require(
+      GATEWAY_WALLET.withdrawingBalance(address(USDC), address(this)) == 0,
+      WithdrawalInProcess()
+    );
+
+    uint256 swept = HUB.getAssetSwept(ASSET_ID);
+    uint256 available = GATEWAY_WALLET.availableBalance(address(USDC), address(this));
+    uint256 dust = Math.saturatingSub(available, swept);
+
+    require(dust > 0, NoDust());
+
+    GATEWAY_WALLET.initiateWithdrawal(address(USDC), dust);
+
+    emit DustWithdrawalInitiated(dust);
+  }
+
+  /// @inheritdoc IReinvestmentController
+  function claimDust(address recipient) external onlyRole(DEFAULT_ADMIN_ROLE) whenPaused {
+    require(recipient != address(0), InvalidZeroAddress());
+
+    uint256 amount = GATEWAY_WALLET.withdrawingBalance(address(USDC), address(this));
+
+    require(amount > 0, NoWithdrawalInProcess());
+
+    GATEWAY_WALLET.withdraw(address(USDC));
+    USDC.safeTransfer(recipient, amount);
+
+    emit ClaimedDust(recipient, amount);
+  }
+
+  /// @inheritdoc IReinvestmentController
   function pause() external onlyRole(PAUSER_ROLE) {
     _pause();
   }

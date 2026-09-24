@@ -108,6 +108,15 @@ abstract contract ReinvestmentControllerTestBase is Test, GatewayPayloads {
     controller.invest(amount);
   }
 
+  function _donate(uint256 amount) internal {
+    usdc.mint(alice, amount);
+
+    vm.startPrank(alice);
+    usdc.approve(address(wallet), amount);
+    wallet.depositFor(address(usdc), address(controller), amount);
+    vm.stopPrank();
+  }
+
   function _pause() internal {
     vm.prank(pauser);
     controller.pause();

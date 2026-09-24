@@ -88,6 +88,14 @@ contract MockHub {
     _addedAssets += amount;
   }
 
+  function remove(uint256 amount) external {
+    require(amount <= _liquidity, InsufficientLiquidity(_liquidity));
+
+    _liquidity -= amount;
+    _addedAssets -= amount;
+    USDC.burn(address(this), amount);
+  }
+
   function setAccounting(uint256 addedAssets_, uint256 liquidity_, uint256 swept_) external {
     _addedAssets = addedAssets_;
     _liquidity = liquidity_;

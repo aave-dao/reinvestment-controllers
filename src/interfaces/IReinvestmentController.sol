@@ -78,6 +78,12 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// @notice Thrown when there is no Gateway balance in excess of the swept amount
   error NoDust();
 
+  /// @dev No dust withdrawal is pending; the queued withdrawal, if any, is principal
+  error NoDustWithdrawalInProcess();
+
+  /// @dev Paying out would leave the Hub's swept balance unbacked at the Gateway
+  error SweptNotBacked();
+
   /// @dev No pending on-chain withdrawal
   error NoWithdrawalInProcess();
 
@@ -202,10 +208,18 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// As the contract potentially overpays fees if they are lower than max fee, a certain amount accumulates on the
   /// Gateway that can only be claimed by this function, as the other paths use the HUB.reclaim() functionality and
   /// check the accounting against that balance.
+  /// @dev Sizes the withdrawal as `available - swept`, which measures surplus only once every burn
+  /// has settled. {divest} lowers `swept` when it mints, while the Gateway balance drops later when
+  /// Circle burns, so in between the difference is money already owed and this queues too much.
+  /// {claimDust} refuses to pay that out, and {withdraw} returns it to the Hub
   function initiateDustWithdrawal() external;
 
   /// @notice Completes a pending dust withdrawal and forwards it to `recipient`. The dust is
   /// not reclaimed to the Hub, as it was never counted as swept.
+  /// @dev Requires a dust withdrawal to be pending, so it cannot pay out one queued by
+  /// {initiateWithdrawal}, and requires the Gateway's available balance to still cover `swept`
+  /// afterwards, so a burn landing against the queued amount blocks the claim rather than
+  /// draining principal. Blocked funds stay in the Gateway and {withdraw} returns them to the Hub
   /// @param recipient The address to receive the dust
   function claimDust(address recipient) external;
 
@@ -334,6 +348,12 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// balance on top of the amount withdrawn
   /// @return The maximum fee (in absolute terms)
   function getMaxFee() external view returns (uint256);
+
+  /// @notice Returns the amount queued by {initiateDustWithdrawal} and not yet claimed
+  /// @dev Zero when no withdrawal is pending, and zero while a principal withdrawal is pending,
+  /// which is what {claimDust} checks to tell the two paths apart
+  /// @return The pending dust amount
+  function getPendingDust() external view returns (uint256);
 
   /// @notice Returns the exposure cap (in absolute terms)
   /// @dev Can be set to zero to sunset ReinvestmentController

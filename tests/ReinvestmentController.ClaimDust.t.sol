@@ -11,6 +11,7 @@ import {ReinvestmentControllerTestBase} from './ReinvestmentController.Base.t.so
 contract ReinvestmentControllerClaimDustTest is ReinvestmentControllerTestBase {
   uint256 internal constant INVESTED = 400_000e6;
   uint256 internal constant DUST = 1_000e6;
+  uint256 internal constant BURNED = 100_000e6;
 
   function setUp() public override {
     super.setUp();
@@ -32,6 +33,7 @@ contract ReinvestmentControllerClaimDustTest is ReinvestmentControllerTestBase {
     vm.prank(admin);
     controller.claimDust(alice);
 
+    assertEq(controller.getPendingDust(), 0);
     assertEq(usdc.balanceOf(alice), DUST);
     assertEq(usdc.balanceOf(address(controller)), 0);
     assertEq(usdc.balanceOf(address(wallet)), INVESTED);
@@ -61,6 +63,59 @@ contract ReinvestmentControllerClaimDustTest is ReinvestmentControllerTestBase {
     controller.unpause();
 
     assertFalse(controller.paused());
+  }
+
+  /// @dev Circle burns an attested intent after the mint, so a burn can land while the dust
+  /// withdrawal is queued. Paying out would leave the Hub's swept balance unbacked
+  function test_claimDust_revertsWith_SweptNotBacked() public {
+    vm.prank(address(minter));
+    wallet.gatewayBurn(address(usdc), address(controller), BURNED, 0);
+
+    assertLt(
+      wallet.availableBalance(address(usdc), address(controller)),
+      hub.getAssetSwept(assetId)
+    );
+
+    vm.expectRevert(IReinvestmentController.SweptNotBacked.selector);
+    vm.prank(admin);
+    controller.claimDust(alice);
+  }
+
+  /// @dev The queued amount is not stranded when {claimDust} refuses it: {withdraw} returns it to
+  /// the Hub instead
+  function test_claimDust_blockedDustIsRecoverableThroughWithdraw() public {
+    vm.prank(address(minter));
+    wallet.gatewayBurn(address(usdc), address(controller), BURNED, 0);
+
+    uint256 liquidityBefore = hub.getAssetLiquidity(assetId);
+
+    vm.expectRevert(IReinvestmentController.SweptNotBacked.selector);
+    vm.prank(admin);
+    controller.claimDust(alice);
+
+    vm.prank(admin);
+    controller.withdraw();
+
+    assertEq(controller.getPendingDust(), 0);
+    assertEq(wallet.withdrawingBalance(address(usdc), address(controller)), 0);
+    assertEq(hub.getAssetLiquidity(assetId), liquidityBefore + DUST);
+    assertEq(hub.getAssetSwept(assetId), INVESTED - DUST);
+  }
+
+  function test_claimDust_revertsWith_NoDustWithdrawalInProcess_principalWithdrawal() public {
+    vm.startPrank(admin);
+    controller.claimDust(alice);
+    controller.initiateWithdrawal();
+    vm.stopPrank();
+
+    vm.roll(block.number + WITHDRAWAL_DELAY);
+
+    assertEq(controller.getPendingDust(), 0);
+    assertGt(wallet.withdrawingBalance(address(usdc), address(controller)), 0);
+
+    vm.expectRevert(IReinvestmentController.NoDustWithdrawalInProcess.selector);
+    vm.prank(admin);
+    controller.claimDust(alice);
   }
 
   function test_claimDust_revertsWith_AccessControlUnauthorizedAccount_keeper() public {
@@ -97,11 +152,11 @@ contract ReinvestmentControllerClaimDustTest is ReinvestmentControllerTestBase {
     controller.claimDust(address(0));
   }
 
-  function test_claimDust_revertsWith_NoWithdrawalInProcess() public {
+  function test_claimDust_revertsWith_NoDustWithdrawalInProcess() public {
     vm.prank(admin);
     controller.claimDust(alice);
 
-    vm.expectRevert(IReinvestmentController.NoWithdrawalInProcess.selector);
+    vm.expectRevert(IReinvestmentController.NoDustWithdrawalInProcess.selector);
     vm.prank(admin);
     controller.claimDust(alice);
   }

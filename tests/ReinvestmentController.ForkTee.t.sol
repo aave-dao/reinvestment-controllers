@@ -281,6 +281,45 @@ contract ReinvestmentControllerForkTeeTest is ReinvestmentControllerForkBase {
     _teeBurn(auth, MAX_FEE);
   }
 
+  /// @dev {divest} lowers `swept` on the mint while the Gateway balance only drops once Circle
+  /// burns, so a dust withdrawal queued in between sizes itself from money already owed. The claim
+  /// is blocked and {withdraw} returns it to the Hub
+  function test_initiateDustWithdrawal_pendingBurnIsBlockedAndRecovered() public {
+    uint256 invested = _investAll();
+    uint256 amount = invested / 4;
+    Authorization memory auth = _authorize(amount, 'a');
+
+    _mint(auth, keeper);
+
+    vm.prank(admin);
+    controller.pause();
+
+    vm.prank(admin);
+    controller.initiateDustWithdrawal();
+
+    assertEq(controller.getPendingDust(), amount + MAX_FEE);
+    assertEq(_withdrawing(), amount + MAX_FEE);
+    assertEq(_available(), _swept());
+
+    _teeBurn(auth, MAX_FEE);
+
+    assertLt(_available(), _swept());
+
+    vm.roll(block.number + IGatewayWallet(GATEWAY_WALLET).withdrawalDelay());
+
+    vm.expectRevert(IReinvestmentController.SweptNotBacked.selector);
+    vm.prank(admin);
+    controller.claimDust(alice);
+
+    vm.prank(admin);
+    controller.withdraw();
+
+    assertEq(controller.getPendingDust(), 0);
+    assertEq(_withdrawing(), 0);
+    assertEq(_swept(), _available());
+    assertEq(IERC20(USDC).balanceOf(alice), 0);
+  }
+
   function test_divest_revertsWith_TransferSpecHashUsed_duplicateSubmission() public {
     uint256 invested = _investAll();
     Authorization memory auth = _authorize(invested / 4, 'a');

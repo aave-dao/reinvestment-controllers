@@ -421,7 +421,7 @@ contract ReinvestmentController is
     emit SetExposureCapBps(oldExposureCapBps, newExposureCapBps);
   }
 
-  /// @dev Refuses to stack a withdrawal on top of another. Checked before either path (dust/withdraw) 
+  /// @dev Refuses to stack a withdrawal on top of another. Checked before either path (dust/withdraw)
   /// sizes its amount, as a pending withdrawal leaves the available balance empty and would otherwise
   /// surface as an empty-amount error instead
   function _requireNoPendingWithdrawal() internal view {

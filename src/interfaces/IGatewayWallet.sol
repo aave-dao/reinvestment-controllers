@@ -37,17 +37,27 @@ interface IGatewayWallet {
   /// @return The Gateway domain identifier
   function domain() external view returns (uint32);
 
+  /// @notice Whether the wallet accepts deposits of a token
+  /// @param token The token to check
+  /// @return True when the token is supported
+  function isTokenSupported(address token) external view returns (bool);
+
   /// @notice The balance still usable to back a burn, and therefore a mint
-  /// @dev Reduced by `initiateWithdrawal`, which moves the amount into
-  /// {withdrawingBalance}, and by Circle's out-of-band burn of an attested intent
+  /// @dev Reduced by `initiateWithdrawal`, which moves the amount into {withdrawingBalance}, by
+  /// Circle's out-of-band burn of an attested intent, and by `submitBatch`, where a signer
+  /// registered by the wallet's owner applies balance deltas with no depositor signature and no
+  /// burn intent. This contract neither registers such signers nor opts into batches, and cannot
+  /// decline them. A batch must net to zero across depositors, so it cannot create balance, but it
+  /// can move this contract's balance to another depositor
   /// @param token The deposited token
   /// @param depositor The owner of the balance
   /// @return The available balance
   function availableBalance(address token, address depositor) external view returns (uint256);
 
   /// @notice The balance reserved by an in-progress on-chain withdrawal
-  /// @dev No longer usable to back a burn or a mint. Paid out by `withdraw` once
-  /// {withdrawalBlock} has been reached.
+  /// @dev Not usable to back a new mint, but still reachable by a burn or a `submitBatch` debit
+  /// once the available balance is exhausted. Paid out by `withdraw` once {withdrawalBlock} has
+  /// been reached.
   /// @param token The deposited token
   /// @param depositor The owner of the balance
   /// @return The withdrawing balance

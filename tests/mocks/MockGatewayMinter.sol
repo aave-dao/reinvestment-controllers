@@ -25,6 +25,8 @@ contract MockGatewayMinter {
 
   uint32 public domain;
 
+  mapping(address token => bool) public isTokenSupported;
+
   constructor(address gatewayWallet) {
     GATEWAY_WALLET = MockGatewayWallet(gatewayWallet);
   }
@@ -58,6 +60,10 @@ contract MockGatewayMinter {
 
   function setNextFee(uint256 fee) external {
     nextFee = fee;
+  }
+
+  function setTokenSupported(address token, bool supported) external {
+    isTokenSupported[token] = supported;
   }
 
   function setDomain(uint32 domain_) external {

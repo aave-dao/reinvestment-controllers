@@ -60,6 +60,11 @@ The Gateway is Circle's. We depend on them for:
   Circle's API. Transaction size limit is imposed by the API.
 - **Burns.** Circle burns an intent only after observing its mint in a finalized block, so a
   burn always follows a `divest`. The controller cannot observe or enforce this ordering.
+- **Batch adjustments.** A signer registered by the wallet's owner can debit the controller's
+  Gateway balance through `submitBatch`, with no signature from us and no burn intent. The
+  controller never registers such a signer and cannot decline one, since the debit path checks
+  only that the signer is registered. Batches must net to zero across depositors, so balance
+  moves rather than disappears, and debits can reach funds pending withdrawal.
 - **Withdrawal delay.** The on-chain exit delay is the wallet's `withdrawalDelay`, owner
   controlled. The controller does not enforce its own.
 - **Pausing and denylisting.** Circle can pause either contract, denylist the controller,
@@ -69,6 +74,15 @@ The Gateway is Circle's. We depend on them for:
 
 On the Aave side, only governance can attach or detach the controller, via
 `Hub.updateAssetConfig`. It cannot be detached while the asset still has a swept balance.
+
+The keeper is trusted not to manipulate the Hub's balances to get around the relative limits.
+`getInvestableAmount` reads supplied assets and idle liquidity at call time, so a keeper that
+temporarily inflates them, for example by supplying flash-borrowed USDC in the same transaction,
+can invest beyond what `exposureCapBps` and `liquidBufferBps` would otherwise allow. Those two
+are policy limits, meant to stop an honest keeper from stranding liquidity, not a defense against
+the keeper itself. `exposureCapAbs` does not depend on any balance that can move within a
+transaction, so it is the hard bound on how much can ever sit at the Gateway, and it is the
+parameter to set conservatively.
 
 Note that `isValidSignature` is a view function and cannot record what it has signed for.
 Multiple burn intents are each validated against the same balance; the wallet's own

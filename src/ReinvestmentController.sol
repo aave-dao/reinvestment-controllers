@@ -102,6 +102,7 @@ contract ReinvestmentController is
         usdc != address(0),
       InvalidZeroAddress()
     );
+    require(gatewayWallet != gatewayMinter, InvalidGatewayConfiguration());
 
     GATEWAY_WALLET = IGatewayWallet(gatewayWallet);
     GATEWAY_MINTER = IGatewayMinter(gatewayMinter);
@@ -109,7 +110,14 @@ contract ReinvestmentController is
     USDC = IERC20(usdc);
     ASSET_ID = IHub(hub).getAssetId(usdc);
     DOMAIN = IGatewayWallet(gatewayWallet).domain();
+
     require(IGatewayMinter(gatewayMinter).domain() == DOMAIN, InvalidDomain());
+    require(
+      IGatewayWallet(gatewayWallet).domainSeparator() != bytes32(0),
+      InvalidGatewayConfiguration()
+    );
+    require(IGatewayWallet(gatewayWallet).isTokenSupported(usdc), InvalidGatewayConfiguration());
+    require(IGatewayMinter(gatewayMinter).isTokenSupported(usdc), InvalidGatewayConfiguration());
 
     _disableInitializers();
   }

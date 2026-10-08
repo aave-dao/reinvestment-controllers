@@ -39,6 +39,9 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// @dev Transfer specification domain does not match the Gateway domain of this chain
   error InvalidDomain();
 
+  /// @dev Gateway wallet and minter are the same contract, or are not configured for USDC
+  error InvalidGatewayConfiguration();
+
   /// @dev Transfer specification carries hook data, which is not supported
   error InvalidHookData();
 
@@ -144,12 +147,20 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   ) external;
 
   /// @notice Invests amount of funds into USDC Gateway
+  /// @dev The relative limits are evaluated against the Hub's balances at call time, so a keeper
+  /// that temporarily inflates supplied assets or idle liquidity can invest beyond
+  /// {getExposureCapBps} and {getLiquidBufferBps}.
+  /// {getExposureCapAbs} does not move within a transaction and is what bounds the position as an
+  /// absolute cap.
   /// @param amount Amount of USDC to invest
   function invest(uint256 amount) external;
 
   /// @notice Divests amount of funds from USDC Gateway
-  /// @dev Bounded only by the swept balance. Circle caps attestation size off-chain, and the
-  /// Gateway contracts impose no on-chain limit
+  /// @dev Bounded by the swept balance less {maxFee}, which is what a full exit divests. An intent
+  /// for more than that can still pass {isValidSignature} when its own `maxFee` is lower than the
+  /// configured one, but {divest} always charges the configured fee, so such an attestation cannot
+  /// be used. Circle caps attestation size off-chain, and the Gateway contracts impose no on-chain
+  /// limit.
   /// @dev The attestation names this contract as recipient, so the mint lands here and is then
   /// transferred on to the Hub, rather than naming the Hub directly and letting {reclaim} find
   /// the funds already there. {reclaim} only requires the Hub's aggregate balance to cover the
@@ -184,6 +195,12 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   function initiateWithdrawal() external;
 
   /// @notice Finalizes a pending withdrawal after required time has elapsed
+  /// @dev {reclaim} is restricted to the Hub's configured controller, so repointing the Hub at a
+  /// different controller while a withdrawal is pending makes this revert until it is pointed back.
+  /// If the replacement also reduced `swept` below the pending amount, the reclaim stays blocked
+  /// until `swept` covers it again. The funds remain claimable in the Gateway in both cases, and
+  /// the implementation sits behind a proxy, so a state this code cannot resolve can be addressed
+  /// by upgrading it
   function withdraw() external;
 
   /// @notice Halts {invest}, {divest} and {isValidSignature}
@@ -222,7 +239,9 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// is itself `whenNotPaused`, so pausing first blocks the settlement that has to happen. A lower
   /// cap otherwise makes {divest} pre-pay less than Circle can still charge against an intent
   /// signed under the old one. Raising the cap needs no draining: it only makes {divest}
-  /// over-pay, which cannot leave the Hub's `swept` overstated
+  /// over-pay, which cannot leave the Hub's `swept` overstated. An attestation whose amount falls
+  /// within the increase of the swept balance becomes unusable, since its amount is fixed, and has
+  /// to be re-requested
   /// @param maxFee_ The new maximum fee (in absolute terms)
   function setMaxFee(uint256 maxFee_) external;
 

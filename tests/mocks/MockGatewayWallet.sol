@@ -36,6 +36,8 @@ contract MockGatewayWallet {
 
   uint32 public domain;
 
+  mapping(address token => bool) public isTokenSupported;
+
   mapping(address token => mapping(address depositor => uint256)) internal _availableBalances;
   mapping(address token => mapping(address depositor => uint256)) internal _withdrawingBalances;
   mapping(address token => mapping(address depositor => uint256)) internal _withdrawalBlocks;
@@ -130,6 +132,10 @@ contract MockGatewayWallet {
 
   function withdrawalBlock(address token, address depositor) external view returns (uint256) {
     return _withdrawalBlocks[token][depositor];
+  }
+
+  function setTokenSupported(address token, bool supported) external {
+    isTokenSupported[token] = supported;
   }
 
   function setGatewayMinter(address minter) external {

@@ -8,10 +8,13 @@ import {
   type PublicClient,
   type WalletClient,
 } from 'viem';
+import {controllerAbi} from './abi/controller.js';
+import {gatewayWalletAbi} from './abi/gatewayWallet.js';
+import {hubAbi} from './abi/hub.js';
 import {buildBurnIntent, signBurnIntent, type BurnIntent} from './circle/burnIntent.js';
 import {requestAttestation, type TransferAttestation} from './circle/client.js';
 import type {Config} from './config.js';
-import {controllerAbi, gatewayWalletAbi, hubAbi, type Deployment} from './controller.js';
+import type {Deployment} from './deployment.js';
 
 const PERCENTAGE_FACTOR = 10_000n;
 
@@ -65,27 +68,36 @@ export function getShortfall(state: KeeperState): bigint {
   return max(saturatingSub(buffer, state.idle), saturatingSub(state.swept, cap));
 }
 
-/** Sizes the next divest, whose `amount + maxFee` returns to the Hub, capped per transfer */
+/**
+ * Sizes the next divest, whose `amount + maxFee` returns to the Hub, capped per transfer.
+ * Returns 0 when nothing should be divested
+ */
 export function planDivest(
   state: KeeperState,
   config: Pick<Config, 'MIN_DIVEST_AMOUNT' | 'MAX_DIVEST_AMOUNT'>,
-): bigint | undefined {
+): bigint {
   const shortfall = getShortfall(state);
-  if (shortfall === 0n || shortfall < config.MIN_DIVEST_AMOUNT) return undefined;
+  if (shortfall === 0n || shortfall < config.MIN_DIVEST_AMOUNT) return 0n;
 
   const withdrawable = saturatingSub(state.swept, state.maxFee);
-  const amount = min(max(shortfall - state.maxFee, 1n), config.MAX_DIVEST_AMOUNT, withdrawable);
-  return amount > 0n ? amount : undefined;
+  return min(max(shortfall - state.maxFee, 1n), config.MAX_DIVEST_AMOUNT, withdrawable);
 }
 
+/**
+ * Sizes the next invest below the investable amount read now, since interest accrued before the
+ * transaction lands grows the liquid buffer and shrinks what `invest` will accept.
+ * Returns 0 when nothing should be invested
+ */
 export function planInvest(
   state: KeeperState,
-  config: Pick<Config, 'MIN_INVEST_AMOUNT'>,
-): bigint | undefined {
-  if (getShortfall(state) > 0n) return undefined;
-  if (state.timestamp < state.lastInvestTimestamp + state.investMinDelay) return undefined;
-  if (state.investableAmount < config.MIN_INVEST_AMOUNT) return undefined;
-  return state.investableAmount;
+  config: Pick<Config, 'MIN_INVEST_AMOUNT' | 'INVEST_HAIRCUT_BPS'>,
+): bigint {
+  if (getShortfall(state) > 0n) return 0n;
+  if (state.timestamp < state.lastInvestTimestamp + state.investMinDelay) return 0n;
+
+  const haircut = (state.investableAmount * config.INVEST_HAIRCUT_BPS) / PERCENTAGE_FACTOR;
+  const amount = state.investableAmount - haircut;
+  return amount >= config.MIN_INVEST_AMOUNT ? amount : 0n;
 }
 
 export async function readState(ctx: KeeperContext): Promise<KeeperState> {
@@ -145,12 +157,12 @@ export async function tick(ctx: KeeperContext): Promise<TickResult> {
 
   if (!ctx.pending) {
     const amount = planDivest(state, ctx.config);
-    if (amount !== undefined) ctx.pending = await createPendingDivest(ctx, state, amount);
+    if (amount > 0n) ctx.pending = await createPendingDivest(ctx, state, amount);
   }
   if (ctx.pending) return settlePendingDivest(ctx, ctx.pending, state.blockNumber);
 
   const amount = planInvest(state, ctx.config);
-  if (amount === undefined) return 'idle';
+  if (amount === 0n) return 'idle';
 
   const {request} = await ctx.publicClient.simulateContract({
     account: ctx.account,

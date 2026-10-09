@@ -4,7 +4,7 @@ import {beforeEach, describe, expect, it, vi} from 'vitest';
 import {encodeBurnIntent} from '../src/circle/burnIntent.js';
 import {requestAttestation} from '../src/circle/client.js';
 import type {Config} from '../src/config.js';
-import type {Deployment} from '../src/controller.js';
+import type {Deployment} from '../src/deployment.js';
 import {
   getShortfall,
   planDivest,
@@ -20,11 +20,13 @@ const USDC = 1_000_000n;
 const MAX_FEE = 1_100_000n;
 
 const config: Config = {
-  RPC_MAINNET: 'https://rpc.example',
+  CHAIN: 'mainnet',
+  RPC_URL: 'https://rpc.example',
   CONTROLLER_ADDRESS: '0x1111111111111111111111111111111111111111',
   CIRCLE_GATEWAY_API_URL: 'https://gateway-api.circle.com',
   POLL_INTERVAL_SECONDS: 300,
   MIN_INVEST_AMOUNT: 100_000n * USDC,
+  INVEST_HAIRCUT_BPS: 10n,
   MIN_DIVEST_AMOUNT: 1_000n * USDC,
   MAX_DIVEST_AMOUNT: 10_000_000n * USDC,
   BURN_INTENT_VALIDITY_BLOCKS: 7_200n,
@@ -89,7 +91,7 @@ describe('getShortfall', () => {
 
 describe('planDivest', () => {
   it('does nothing below the minimum divest', () => {
-    expect(planDivest(balancedState({idle: 19_999_500n * USDC}), config)).toBeUndefined();
+    expect(planDivest(balancedState({idle: 19_999_500n * USDC}), config)).toBe(0n);
   });
 
   it('nets the pre-paid fee out of the shortfall', () => {
@@ -115,29 +117,33 @@ describe('planDivest', () => {
     expect(planDivest(balancedState({idle: 0n, swept: 3_000_000n * USDC}), config)).toBe(
       3_000_000n * USDC - MAX_FEE,
     );
-    expect(planDivest(balancedState({idle: 0n, swept: MAX_FEE}), config)).toBeUndefined();
+    expect(planDivest(balancedState({idle: 0n, swept: MAX_FEE}), config)).toBe(0n);
   });
 });
 
 describe('planInvest', () => {
   const investable = balancedState({investableAmount: 500_000n * USDC});
 
-  it('invests the full investable amount', () => {
-    expect(planInvest(investable, config)).toBe(500_000n * USDC);
+  it('invests the investable amount less the haircut', () => {
+    expect(planInvest(investable, config)).toBe(499_500n * USDC);
   });
 
-  it('does nothing below the minimum invest', () => {
-    expect(planInvest({...investable, investableAmount: 99_999n * USDC}, config)).toBeUndefined();
+  it('invests the full investable amount without a haircut', () => {
+    expect(planInvest(investable, {...config, INVEST_HAIRCUT_BPS: 0n})).toBe(500_000n * USDC);
+  });
+
+  it('does nothing when the amount after the haircut is below the minimum invest', () => {
+    expect(planInvest({...investable, investableAmount: 100_050n * USDC}, config)).toBe(0n);
   });
 
   it('waits for the minimum delay', () => {
     expect(
       planInvest({...investable, lastInvestTimestamp: investable.timestamp - 86_399n}, config),
-    ).toBeUndefined();
+    ).toBe(0n);
   });
 
   it('does not invest while there is a shortfall', () => {
-    expect(planInvest({...investable, idle: 15_000_000n * USDC}, config)).toBeUndefined();
+    expect(planInvest({...investable, idle: 15_000_000n * USDC}, config)).toBe(0n);
   });
 });
 
@@ -211,7 +217,7 @@ describe('tick', () => {
   it('invests when nothing needs divesting', async () => {
     state = balancedState({investableAmount: 500_000n * USDC});
     expect(await tick(ctx)).toBe('invested');
-    expect(writes).toEqual([{functionName: 'invest', args: [500_000n * USDC]}]);
+    expect(writes).toEqual([{functionName: 'invest', args: [499_500n * USDC]}]);
   });
 
   it('divests the shortfall through a signed, attested burn intent', async () => {

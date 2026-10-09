@@ -1,4 +1,18 @@
-import type {Address, Hex, TypedDataDefinition} from 'viem';
+import {
+  encodeAbiParameters,
+  encodePacked,
+  keccak256,
+  pad,
+  size,
+  type Address,
+  type Hex,
+  type LocalAccount,
+  type TypedDataDefinition,
+} from 'viem';
+
+const BURN_INTENT_MAGIC = '0x070afbc2';
+const TRANSFER_SPEC_MAGIC = '0xca85def7';
+const TRANSFER_SPEC_VERSION = 1;
 
 export const gatewayDomain = {name: 'GatewayWallet', version: '1'} as const;
 
@@ -40,6 +54,99 @@ export type BuildBurnIntentParams = {
   salt: Hex;
 };
 
+/** Builds a same-domain withdrawal with every party pinned to the controller */
 export function buildBurnIntent(params: BuildBurnIntentParams): BurnIntent {
-  throw new Error('not implemented');
+  const controller = pad(params.controller);
+  const usdc = pad(params.usdc);
+
+  return {
+    maxBlockHeight: params.maxBlockHeight,
+    maxFee: params.maxFee,
+    spec: {
+      version: TRANSFER_SPEC_VERSION,
+      sourceDomain: params.domain,
+      destinationDomain: params.domain,
+      sourceContract: pad(params.gatewayWallet),
+      destinationContract: pad(params.gatewayMinter),
+      sourceToken: usdc,
+      destinationToken: usdc,
+      sourceDepositor: controller,
+      destinationRecipient: controller,
+      sourceSigner: controller,
+      destinationCaller: controller,
+      value: params.value,
+      salt: params.salt,
+      hookData: '0x',
+    },
+  };
+}
+
+/** Encodes a transfer spec in Gateway's packed format, matching `TransferSpecLib.encodeTransferSpec` */
+export function encodeTransferSpec(spec: BurnIntent['spec']): Hex {
+  return encodePacked(
+    [
+      'bytes4',
+      'uint32',
+      'uint32',
+      'uint32',
+      'bytes32',
+      'bytes32',
+      'bytes32',
+      'bytes32',
+      'bytes32',
+      'bytes32',
+      'bytes32',
+      'bytes32',
+      'uint256',
+      'bytes32',
+      'uint32',
+      'bytes',
+    ],
+    [
+      TRANSFER_SPEC_MAGIC,
+      spec.version,
+      spec.sourceDomain,
+      spec.destinationDomain,
+      spec.sourceContract,
+      spec.destinationContract,
+      spec.sourceToken,
+      spec.destinationToken,
+      spec.sourceDepositor,
+      spec.destinationRecipient,
+      spec.sourceSigner,
+      spec.destinationCaller,
+      spec.value,
+      spec.salt,
+      size(spec.hookData),
+      spec.hookData,
+    ],
+  );
+}
+
+/** Encodes a burn intent in Gateway's packed format, matching `BurnIntentLib.encodeBurnIntent` */
+export function encodeBurnIntent(intent: BurnIntent): Hex {
+  const spec = encodeTransferSpec(intent.spec);
+  return encodePacked(
+    ['bytes4', 'uint256', 'uint256', 'uint32', 'bytes'],
+    [BURN_INTENT_MAGIC, intent.maxBlockHeight, intent.maxFee, size(spec), spec],
+  );
+}
+
+/** The cross-chain identifier Gateway uses for replay protection */
+export function getTransferSpecHash(intent: BurnIntent): Hex {
+  return keccak256(encodeTransferSpec(intent.spec));
+}
+
+/** Signs a burn intent with the keeper and wraps it as the controller's {isValidSignature} expects */
+export async function signBurnIntent(account: LocalAccount, intent: BurnIntent): Promise<Hex> {
+  const keeperSignature = await account.signTypedData({
+    domain: gatewayDomain,
+    types: burnIntentTypes,
+    primaryType: 'BurnIntent',
+    message: intent,
+  });
+  return encodeAbiParameters(
+    [{type: 'bytes'}, {type: 'bytes'}],
+    [keeperSignature, encodeBurnIntent(intent)],
+  );
 }

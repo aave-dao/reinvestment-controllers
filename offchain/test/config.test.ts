@@ -55,6 +55,29 @@ describe('loadConfig', () => {
     ).toEqual({KMS_PROVIDER: 'gcp', GCP_KMS_KEY_NAME: 'projects/p/keys/k'});
   });
 
+  it('accepts a private key on a testnet', () => {
+    const {AWS_KMS_KEY_ID: _id, AWS_REGION: _region, ...rest} = env;
+    const privateKey = `0x${'11'.repeat(32)}`;
+    expect(
+      loadConfig({...rest, CHAIN: 'sepolia', KMS_PROVIDER: 'private-key', PRIVATE_KEY: privateKey})
+        .kms,
+    ).toEqual({KMS_PROVIDER: 'private-key', PRIVATE_KEY: privateKey});
+  });
+
+  it('refuses a private key on mainnet', () => {
+    const {AWS_KMS_KEY_ID: _id, AWS_REGION: _region, ...rest} = env;
+    expect(() =>
+      loadConfig({...rest, KMS_PROVIDER: 'private-key', PRIVATE_KEY: `0x${'11'.repeat(32)}`}),
+    ).toThrow('KMS_PROVIDER=private-key is only allowed on testnets');
+  });
+
+  it('rejects a malformed private key', () => {
+    const {AWS_KMS_KEY_ID: _id, AWS_REGION: _region, ...rest} = env;
+    expect(() =>
+      loadConfig({...rest, CHAIN: 'sepolia', KMS_PROVIDER: 'private-key', PRIVATE_KEY: '0x1234'}),
+    ).toThrow();
+  });
+
   it('rejects a haircut above 100%', () => {
     expect(() => loadConfig({...env, INVEST_HAIRCUT_BPS: '10001'})).toThrow();
   });

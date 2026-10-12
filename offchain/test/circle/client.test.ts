@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {GatewayApiError, requestAttestation} from '../../src/circle/client.js';
+import {GatewayApiError, getGatewayBalance, requestAttestation} from '../../src/circle/client.js';
 import {burnIntent} from '../signer/helpers.js';
 
 const API_URL = 'https://gateway-api.circle.com';
@@ -23,7 +23,7 @@ function fakeFetch(status: number, body: unknown) {
 }
 
 describe('requestAttestation', () => {
-  it('posts the signed intent with uint256 fields as decimal strings', async () => {
+  it('posts the signed intent as a contract signature with uint256 fields as decimal strings', async () => {
     const {fetch, requests} = fakeFetch(201, transferResponse);
     await requestAttestation(API_URL, burnIntent.message, SIGNATURE, {fetch});
 
@@ -39,6 +39,7 @@ describe('requestAttestation', () => {
           spec: {...burnIntent.message.spec, value: '1000000000'},
         },
         signature: SIGNATURE,
+        contractSigner: true,
       },
     ]);
   });
@@ -80,5 +81,35 @@ describe('requestAttestation', () => {
     await expect(
       requestAttestation(API_URL, burnIntent.message, SIGNATURE, {fetch, timeoutMs: 10}),
     ).rejects.toMatchObject({name: 'TimeoutError'});
+  });
+});
+
+describe('getGatewayBalance', () => {
+  const DEPOSITOR = '0xCd04D93bEA13921DaD05240D577090b5AC36DfCA';
+
+  it('queries the depositor on one domain and converts to base units', async () => {
+    const {fetch, requests} = fakeFetch(200, {
+      token: 'USDC',
+      balances: [{domain: 0, depositor: DEPOSITOR, balance: '4.7952', pendingBatch: '0'}],
+    });
+
+    expect(await getGatewayBalance(API_URL, 0, DEPOSITOR, {fetch})).toBe(4_795_200n);
+    expect(requests[0]!.url).toBe('https://gateway-api.circle.com/v1/balances');
+    expect(JSON.parse(requests[0]!.init.body as string)).toEqual({
+      token: 'USDC',
+      sources: [{domain: 0, depositor: DEPOSITOR}],
+    });
+  });
+
+  it('treats a missing domain entry as no balance', async () => {
+    const {fetch} = fakeFetch(200, {token: 'USDC', balances: []});
+    expect(await getGatewayBalance(API_URL, 0, DEPOSITOR, {fetch})).toBe(0n);
+  });
+
+  it('throws a GatewayApiError on a non-2xx response', async () => {
+    const {fetch} = fakeFetch(400, '{"message":"bad request"}');
+    await expect(getGatewayBalance(API_URL, 0, DEPOSITOR, {fetch})).rejects.toBeInstanceOf(
+      GatewayApiError,
+    );
   });
 });

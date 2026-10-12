@@ -1,3 +1,4 @@
+import type {Hex} from 'viem';
 import {z} from 'zod';
 import {gatewayApiUrls, type ChainName} from './chains.js';
 
@@ -10,6 +11,13 @@ const kmsSchema = z.discriminatedUnion('KMS_PROVIDER', [
   z.object({
     KMS_PROVIDER: z.literal('gcp'),
     GCP_KMS_KEY_NAME: z.string().min(1),
+  }),
+  z.object({
+    KMS_PROVIDER: z.literal('private-key'),
+    PRIVATE_KEY: z
+      .string()
+      .regex(/^0x[0-9a-fA-F]{64}$/)
+      .transform((value) => value as Hex),
   }),
 ]);
 
@@ -32,8 +40,13 @@ const baseSchema = z
   }));
 
 export type KmsConfig = z.infer<typeof kmsSchema>;
+export type CloudKmsConfig = Exclude<KmsConfig, {KMS_PROVIDER: 'private-key'}>;
 export type Config = z.infer<typeof baseSchema> & {kms: KmsConfig};
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  return {...baseSchema.parse(env), kms: kmsSchema.parse(env)};
+  const config = {...baseSchema.parse(env), kms: kmsSchema.parse(env)};
+  if (config.kms.KMS_PROVIDER === 'private-key' && config.CHAIN === 'mainnet') {
+    throw new Error('KMS_PROVIDER=private-key is only allowed on testnets');
+  }
+  return config;
 }

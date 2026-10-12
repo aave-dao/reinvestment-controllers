@@ -2,7 +2,7 @@ import {decodeAbiParameters, type PublicClient, type WalletClient} from 'viem';
 import {generatePrivateKey, privateKeyToAccount} from 'viem/accounts';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
 import {encodeBurnIntent} from '../src/circle/burnIntent.js';
-import {requestAttestation} from '../src/circle/client.js';
+import {getGatewayBalance, requestAttestation} from '../src/circle/client.js';
 import type {Config} from '../src/config.js';
 import type {Deployment} from '../src/deployment.js';
 import {
@@ -14,7 +14,10 @@ import {
   type KeeperState,
 } from '../src/keeper.js';
 
-vi.mock('../src/circle/client.js', () => ({requestAttestation: vi.fn()}));
+vi.mock('../src/circle/client.js', () => ({
+  getGatewayBalance: vi.fn(),
+  requestAttestation: vi.fn(),
+}));
 
 const USDC = 1_000_000n;
 const MAX_FEE = 1_100_000n;
@@ -166,6 +169,7 @@ describe('tick', () => {
     writes = [];
     fee = {balance: 10n * USDC, allowance: 10n * USDC};
     vi.mocked(requestAttestation).mockReset().mockResolvedValue(attestation);
+    vi.mocked(getGatewayBalance).mockReset().mockResolvedValue(state.swept);
 
     const views: Record<string, () => unknown> = {
       paused: () => state.paused,
@@ -263,6 +267,45 @@ describe('tick', () => {
     expect(await tick(ctx)).toBe('expired');
     expect(writes).toEqual([]);
     expect(ctx.pending).toBeUndefined();
+  });
+
+  it('waits for Circle to index the balance before signing a divest', async () => {
+    state = balancedState({idle: 15_000_000n * USDC});
+    vi.mocked(getGatewayBalance).mockResolvedValue(0n);
+
+    expect(await tick(ctx)).toBe('awaiting-balance');
+    expect(getGatewayBalance).toHaveBeenCalledWith(
+      config.CIRCLE_GATEWAY_API_URL,
+      deployment.domain,
+      deployment.controller,
+    );
+    expect(ctx.pending).toBeUndefined();
+    expect(requestAttestation).not.toHaveBeenCalled();
+    expect(writes).toEqual([]);
+  });
+
+  it('waits when Circle has indexed less than the amount plus the fee', async () => {
+    state = balancedState({idle: 15_000_000n * USDC});
+    vi.mocked(getGatewayBalance).mockResolvedValue(5_000_000n * USDC - 1n);
+
+    expect(await tick(ctx)).toBe('awaiting-balance');
+    expect(requestAttestation).not.toHaveBeenCalled();
+  });
+
+  it('holds an unattested divest until Circle has indexed the balance', async () => {
+    state = balancedState({idle: 15_000_000n * USDC});
+    vi.mocked(requestAttestation).mockRejectedValueOnce(new Error('timeout'));
+    await expect(tick(ctx)).rejects.toThrow('timeout');
+    const pending = ctx.pending;
+
+    vi.mocked(getGatewayBalance).mockResolvedValue(0n);
+    expect(await tick(ctx)).toBe('awaiting-balance');
+    expect(ctx.pending).toBe(pending);
+    expect(requestAttestation).toHaveBeenCalledTimes(1);
+
+    vi.mocked(getGatewayBalance).mockResolvedValue(state.swept);
+    expect(await tick(ctx)).toBe('divested');
+    expect(requestAttestation).toHaveBeenCalledTimes(2);
   });
 
   it('refuses to sign when the keeper cannot fund the fee', async () => {

@@ -1,9 +1,10 @@
 import type {LocalAccount} from 'viem';
-import type {KmsConfig} from '../config.js';
+import {privateKeyToAccount} from 'viem/accounts';
+import type {CloudKmsConfig, KmsConfig} from '../config.js';
 import {toKmsAccount} from './account.js';
 import type {KmsBackend} from './types.js';
 
-export async function createKmsBackend(config: KmsConfig): Promise<KmsBackend> {
+export async function createKmsBackend(config: CloudKmsConfig): Promise<KmsBackend> {
   switch (config.KMS_PROVIDER) {
     case 'aws': {
       const {createAwsKmsBackend} = await import('./aws.js');
@@ -17,5 +18,6 @@ export async function createKmsBackend(config: KmsConfig): Promise<KmsBackend> {
 }
 
 export async function createKeeperAccount(config: KmsConfig): Promise<LocalAccount> {
+  if (config.KMS_PROVIDER === 'private-key') return privateKeyToAccount(config.PRIVATE_KEY);
   return toKmsAccount(await createKmsBackend(config));
 }

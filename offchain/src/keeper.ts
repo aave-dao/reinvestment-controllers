@@ -12,7 +12,7 @@ import {controllerAbi} from './abi/controller.js';
 import {gatewayWalletAbi} from './abi/gatewayWallet.js';
 import {hubAbi} from './abi/hub.js';
 import {buildBurnIntent, signBurnIntent, type BurnIntent} from './circle/burnIntent.js';
-import {requestAttestation, type TransferAttestation} from './circle/client.js';
+import {getGatewayBalance, requestAttestation, type TransferAttestation} from './circle/client.js';
 import type {Config} from './config.js';
 import type {Deployment} from './deployment.js';
 
@@ -50,7 +50,13 @@ export type KeeperState = {
   investMinDelay: bigint;
 };
 
-export type TickResult = 'paused' | 'idle' | 'invested' | 'divested' | 'expired';
+export type TickResult =
+  | 'paused'
+  | 'idle'
+  | 'invested'
+  | 'divested'
+  | 'expired'
+  | 'awaiting-balance';
 
 const min = (...values: bigint[]) => values.reduce((a, b) => (b < a ? b : a));
 const max = (...values: bigint[]) => values.reduce((a, b) => (b > a ? b : a));
@@ -157,7 +163,15 @@ export async function tick(ctx: KeeperContext): Promise<TickResult> {
 
   if (!ctx.pending) {
     const amount = planDivest(state, ctx.config);
-    if (amount > 0n) ctx.pending = await createPendingDivest(ctx, state, amount);
+    if (amount > 0n) {
+      if (!(await isAttestable(ctx, amount + state.maxFee))) return 'awaiting-balance';
+      ctx.pending = await createPendingDivest(ctx, state, amount);
+    }
+  } else if (!ctx.pending.attestation) {
+    const {burnIntent} = ctx.pending;
+    if (!(await isAttestable(ctx, burnIntent.spec.value + burnIntent.maxFee))) {
+      return 'awaiting-balance';
+    }
   }
   if (ctx.pending) return settlePendingDivest(ctx, ctx.pending, state.blockNumber);
 
@@ -173,6 +187,19 @@ export async function tick(ctx: KeeperContext): Promise<TickResult> {
   });
   await confirm(ctx, 'invest', await ctx.walletClient.writeContract(request));
   return 'invested';
+}
+
+/**
+ * Whether Circle has indexed enough of the controller's Gateway balance to attest `total`, so no
+ * intent is signed or submitted while the deposit is still awaiting finality
+ */
+async function isAttestable(ctx: KeeperContext, total: bigint): Promise<boolean> {
+  const balance = await getGatewayBalance(
+    ctx.config.CIRCLE_GATEWAY_API_URL,
+    ctx.deployment.domain,
+    ctx.deployment.controller,
+  );
+  return balance >= total;
 }
 
 async function createPendingDivest(

@@ -169,11 +169,10 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// field of the transfer spec pinned to `self`
   /// @dev The caller must hold and have approved {maxFee} of USDC. It is forwarded to the Hub
   /// alongside the minted amount, because the Gateway debits `amount + fee` when Circle later
-  /// burns. Circle charges a flat fee equal to {maxFee} today, so the two match and nothing is
-  /// left behind. Were it ever to charge less, that lower fee would not be knowable here, since
-  /// Circle may settle the burn only after issuing the attestation. {maxFee} is charged
-  /// regardless, which errs toward over-funding the Hub rather than under-funding it, and
-  /// strands the difference in the Gateway
+  /// burns. Circle sets that fee at burn time and may not charge the full {maxFee}. The actual
+  /// fee is not knowable here, since Circle may settle the burn only after issuing the
+  /// attestation. {maxFee} is charged regardless, which errs toward over-funding the Hub rather
+  /// than under-funding it, and strands any difference in the Gateway
   /// @param amount The amount of funds to withdraw
   /// @param attestationPayload The specification of the withdrawal
   /// @param signature The signature that validates attestation was originated by authorized entity

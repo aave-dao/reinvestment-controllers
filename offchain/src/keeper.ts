@@ -12,7 +12,12 @@ import {controllerAbi} from './abi/controller.js';
 import {gatewayWalletAbi} from './abi/gatewayWallet.js';
 import {hubAbi} from './abi/hub.js';
 import {buildBurnIntent, signBurnIntent, type BurnIntent} from './circle/burnIntent.js';
-import {getGatewayBalance, requestAttestation, type TransferAttestation} from './circle/client.js';
+import {
+  GatewayApiError,
+  getGatewayBalance,
+  requestAttestation,
+  type TransferAttestation,
+} from './circle/client.js';
 import type {Config} from './config.js';
 import type {Deployment} from './deployment.js';
 
@@ -229,16 +234,26 @@ async function createPendingDivest(
   };
 }
 
+/**
+ * Attests and submits the pending divest. A 400 means Circle rejected the intent or already
+ * attested it, so it is dropped and the next divest uses a new salt once the reserved balance is
+ * released
+ */
 async function settlePendingDivest(
   ctx: KeeperContext,
   pending: PendingDivest,
   blockNumber: bigint,
 ): Promise<TickResult> {
-  pending.attestation ??= await requestAttestation(
-    ctx.config.CIRCLE_GATEWAY_API_URL,
-    pending.burnIntent,
-    pending.signature,
-  );
+  try {
+    pending.attestation ??= await requestAttestation(
+      ctx.config.CIRCLE_GATEWAY_API_URL,
+      pending.burnIntent,
+      pending.signature,
+    );
+  } catch (error) {
+    if (error instanceof GatewayApiError && error.status === 400) ctx.pending = undefined;
+    throw error;
+  }
 
   if (blockNumber >= BigInt(pending.attestation.expirationBlock)) {
     ctx.pending = undefined;

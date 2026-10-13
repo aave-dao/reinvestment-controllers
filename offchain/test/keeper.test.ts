@@ -2,7 +2,7 @@ import {decodeAbiParameters, type PublicClient, type WalletClient} from 'viem';
 import {generatePrivateKey, privateKeyToAccount} from 'viem/accounts';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
 import {encodeBurnIntent} from '../src/circle/burnIntent.js';
-import {getGatewayBalance, requestAttestation} from '../src/circle/client.js';
+import {GatewayApiError, getGatewayBalance, requestAttestation} from '../src/circle/client.js';
 import type {Config} from '../src/config.js';
 import type {Deployment} from '../src/deployment.js';
 import {
@@ -14,7 +14,8 @@ import {
   type KeeperState,
 } from '../src/keeper.js';
 
-vi.mock('../src/circle/client.js', () => ({
+vi.mock('../src/circle/client.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/circle/client.js')>()),
   getGatewayBalance: vi.fn(),
   requestAttestation: vi.fn(),
 }));
@@ -260,6 +261,17 @@ describe('tick', () => {
     const [first, second] = vi.mocked(requestAttestation).mock.calls;
     expect(second).toEqual(first);
     expect(writes).toHaveLength(1);
+  });
+
+  it('drops a burn intent that Circle rejects', async () => {
+    state = balancedState({idle: 15_000_000n * USDC});
+    vi.mocked(requestAttestation).mockRejectedValueOnce(
+      new GatewayApiError(400, '{"message":"transfer spec has already been used"}'),
+    );
+
+    await expect(tick(ctx)).rejects.toBeInstanceOf(GatewayApiError);
+    expect(ctx.pending).toBeUndefined();
+    expect(writes).toEqual([]);
   });
 
   it('drops an attestation that has expired', async () => {

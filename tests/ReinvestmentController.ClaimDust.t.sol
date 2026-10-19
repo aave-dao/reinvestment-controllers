@@ -12,9 +12,16 @@ contract ReinvestmentControllerClaimDustTest is ReinvestmentControllerTestBase {
   uint256 internal constant INVESTED = 400_000e6;
   uint256 internal constant DUST = 1_000e6;
   uint256 internal constant BURNED = 100_000e6;
+  uint256 internal constant DIVESTED = 100_000e6;
+  uint256 internal constant CONFIGURED_FEE = 1e6;
+  uint256 internal constant CHARGED_FEE = 0.8e6;
 
   function setUp() public override {
     super.setUp();
+
+    bytes32 adminRole = controller.DEFAULT_ADMIN_ROLE();
+    vm.prank(admin);
+    controller.grantRole(adminRole, alice);
 
     _invest(INVESTED);
     _donate(DUST);
@@ -152,6 +159,12 @@ contract ReinvestmentControllerClaimDustTest is ReinvestmentControllerTestBase {
     controller.claimDust(address(0));
   }
 
+  function test_claimDust_revertsWith_InvalidRecipient() public {
+    vm.expectRevert(IReinvestmentController.InvalidRecipient.selector);
+    vm.prank(admin);
+    controller.claimDust(keeper);
+  }
+
   function test_claimDust_revertsWith_NoDustWithdrawalInProcess() public {
     vm.prank(admin);
     controller.claimDust(alice);
@@ -171,5 +184,72 @@ contract ReinvestmentControllerClaimDustTest is ReinvestmentControllerTestBase {
     vm.expectRevert(PausableUpgradeable.ExpectedPause.selector);
     vm.prank(admin);
     controller.claimDust(alice);
+  }
+
+  /// @dev {divest} lowers swept at mint while the Gateway balance only drops when Circle burns, so
+  /// a dust withdrawal queued in between overstates the dust. The burn landing first blocks the
+  /// claim, {withdraw} returns the excess to the Hub, and only `maxFee - fee` is ever paid out
+  function test_claimDust_overstatedDustBeforeBurnIsReturnedToHub() public {
+    _divestWithDeferredBurn();
+
+    vm.prank(admin);
+    controller.initiateDustWithdrawal();
+
+    assertEq(controller.getPendingDust(), DIVESTED + CONFIGURED_FEE);
+
+    _burnDivested();
+    vm.roll(block.number + WITHDRAWAL_DELAY);
+
+    vm.expectRevert(IReinvestmentController.SweptNotBacked.selector);
+    vm.prank(admin);
+    controller.claimDust(alice);
+
+    vm.prank(admin);
+    controller.withdraw();
+
+    assertEq(
+      wallet.availableBalance(address(usdc), address(controller)),
+      hub.getAssetSwept(assetId) + CONFIGURED_FEE - CHARGED_FEE
+    );
+
+    uint256 aliceBefore = usdc.balanceOf(alice);
+
+    vm.prank(admin);
+    controller.initiateDustWithdrawal();
+    vm.roll(block.number + WITHDRAWAL_DELAY);
+    vm.prank(admin);
+    controller.claimDust(alice);
+
+    assertEq(usdc.balanceOf(alice) - aliceBefore, CONFIGURED_FEE - CHARGED_FEE);
+    assertEq(
+      wallet.availableBalance(address(usdc), address(controller)),
+      hub.getAssetSwept(assetId)
+    );
+  }
+
+  /// @dev Clears the dust queued in setUp, then divests with the burn deferred: the mint lands and
+  /// {divest} lowers swept, but the Gateway balance is untouched until {_burnDivested}
+  function _divestWithDeferredBurn() internal {
+    vm.prank(admin);
+    controller.claimDust(alice);
+    _unpause();
+    _setMaxFee(CONFIGURED_FEE);
+
+    vm.mockCall(address(minter), abi.encodeWithSelector(minter.gatewayMint.selector), '');
+    usdc.mint(address(controller), DIVESTED);
+
+    usdc.mint(keeper, CONFIGURED_FEE);
+    vm.startPrank(keeper);
+    usdc.approve(address(controller), CONFIGURED_FEE);
+    controller.divest(DIVESTED, _encodeAttestation(_defaultTransferSpec(DIVESTED)), hex'1234');
+    vm.stopPrank();
+
+    vm.clearMockedCalls();
+    _pause();
+  }
+
+  function _burnDivested() internal {
+    vm.prank(address(minter));
+    wallet.gatewayBurn(address(usdc), address(controller), DIVESTED, CHARGED_FEE);
   }
 }

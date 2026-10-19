@@ -15,6 +15,10 @@ contract ReinvestmentControllerInitiateDustWithdrawalTest is ReinvestmentControl
   function setUp() public override {
     super.setUp();
 
+    bytes32 adminRole = controller.DEFAULT_ADMIN_ROLE();
+    vm.prank(admin);
+    controller.grantRole(adminRole, alice);
+
     _invest(INVESTED);
     _donate(DUST);
     _pause();

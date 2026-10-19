@@ -45,7 +45,8 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// @dev Invalid mint amount provided in attestation
   error InvalidMintAmount();
 
-  /// @dev Invalid recipient provided in transfer specification
+  /// @dev Invalid recipient provided in transfer specification, or a {claimDust} recipient
+  /// without DEFAULT_ADMIN_ROLE
   error InvalidRecipient();
 
   /// @dev Signer does not have KEEPER_ROLE to sign transaction
@@ -220,6 +221,8 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// {initiateWithdrawal}, and requires the Gateway's available balance to still cover `swept`
   /// afterwards, so a burn landing against the queued amount blocks the claim rather than
   /// draining principal. Blocked funds stay in the Gateway and {withdraw} returns them to the Hub
+  /// @dev `recipient` must hold DEFAULT_ADMIN_ROLE, a sanity check against paying dust out to a
+  /// mistyped address
   /// @param recipient The address to receive the dust
   function claimDust(address recipient) external;
 

@@ -285,6 +285,10 @@ contract ReinvestmentControllerForkTeeTest is ReinvestmentControllerForkBase {
   /// burns, so a dust withdrawal queued in between sizes itself from money already owed. The claim
   /// is blocked and {withdraw} returns it to the Hub
   function test_initiateDustWithdrawal_pendingBurnIsBlockedAndRecovered() public {
+    bytes32 adminRole = controller.DEFAULT_ADMIN_ROLE();
+    vm.prank(admin);
+    controller.grantRole(adminRole, alice);
+
     uint256 invested = _investAll();
     uint256 amount = invested / 4;
     Authorization memory auth = _authorize(amount, 'a');

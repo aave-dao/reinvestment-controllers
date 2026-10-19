@@ -236,6 +236,7 @@ contract ReinvestmentController is
   /// @inheritdoc IReinvestmentController
   function claimDust(address recipient) external onlyRole(DEFAULT_ADMIN_ROLE) whenPaused {
     require(recipient != address(0), InvalidZeroAddress());
+    require(hasRole(DEFAULT_ADMIN_ROLE, recipient), InvalidRecipient());
 
     ReinvestmentControllerStorage storage $ = _getReinvestmentControllerStorage();
 

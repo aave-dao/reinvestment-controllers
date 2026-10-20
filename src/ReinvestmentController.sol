@@ -498,13 +498,11 @@ contract ReinvestmentController is
     bytes29 spec = BurnIntentLib.getTransferSpec(intent);
     _validateTransferSpec(address(USDC), spec);
 
+    uint256 maxFee = _getReinvestmentControllerStorage().maxFee;
     uint256 intentMaxFee = BurnIntentLib.getMaxFee(intent);
-    require(intentMaxFee <= _getReinvestmentControllerStorage().maxFee, MaxFeeExceeded());
+    require(intentMaxFee <= maxFee, MaxFeeExceeded());
 
-    require(
-      spec.getValue() + intentMaxFee <= HUB.getAssetSwept(ASSET_ID),
-      BurnIntentExceedsBalance()
-    );
+    require(spec.getValue() + maxFee <= HUB.getAssetSwept(ASSET_ID), BurnIntentExceedsBalance());
   }
 
   /// @dev Validates the parameters of a withdrawal (BurnIntent)

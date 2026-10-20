@@ -175,11 +175,10 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   function invest(uint256 amount) external;
 
   /// @notice Divests amount of funds from USDC Gateway
-  /// @dev Bounded by the swept balance less {maxFee}, which is what a full exit divests. An intent
-  /// for more than that can still pass {isValidSignature} when its own `maxFee` is lower than the
-  /// configured one, but {divest} always charges the configured fee, so such an attestation cannot
-  /// be used. Circle caps attestation size off-chain, and the Gateway contracts impose no on-chain
-  /// limit.
+  /// @dev Bounded by the swept balance less {maxFee}, which is what a full exit divests.
+  /// {isValidSignature} applies the same bound with the configured {maxFee} rather than the
+  /// intent's own, so every intent it accepts yields an attestation {divest} can consume. Circle
+  /// caps attestation size off-chain, and the Gateway contracts impose no on-chain limit.
   /// @dev The attestation names this contract as recipient, so the mint lands here and is then
   /// transferred on to the Hub, rather than naming the Hub directly and letting {reclaim} find
   /// the funds already there. {reclaim} only requires the Hub's aggregate balance to cover the

@@ -201,7 +201,7 @@ contract ReinvestmentControllerForkTest is ReinvestmentControllerForkBase {
     controller.invest(amount);
     (bytes32 digest, bytes memory signature) = _signBurnIntent(
       keeperPrivateKey,
-      _encodeBurnIntent(_defaultTransferSpec(amount))
+      _encodeBurnIntent(_defaultTransferSpec(amount - MAX_FEE), MAX_FEE)
     );
 
     assertEq(controller.isValidSignature(digest, signature), IERC1271.isValidSignature.selector);

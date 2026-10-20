@@ -60,6 +60,8 @@ abstract contract ReinvestmentControllerTestBase is Test, GatewayPayloads {
     wallet = new MockGatewayWallet(WITHDRAWAL_DELAY);
     minter = new MockGatewayMinter(address(wallet));
     wallet.setGatewayMinter(address(minter));
+    wallet.setTokenSupported(address(usdc), true);
+    minter.setTokenSupported(address(usdc), true);
 
     assetId = hub.USDC_ASSET_ID();
 

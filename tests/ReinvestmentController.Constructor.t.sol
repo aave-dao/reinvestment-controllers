@@ -6,6 +6,7 @@ import {Initializable} from '@openzeppelin/contracts/proxy/utils/Initializable.s
 import {ReinvestmentController} from '../src/ReinvestmentController.sol';
 import {IReinvestmentController} from '../src/interfaces/IReinvestmentController.sol';
 
+import {MockBadGatewayWallet} from './mocks/MockBadGatewayWallet.sol';
 import {MockHub} from './mocks/MockHub.sol';
 import {MockUSDC} from './mocks/MockUSDC.sol';
 import {ReinvestmentControllerTestBase} from './ReinvestmentController.Base.t.sol';
@@ -41,6 +42,9 @@ contract ReinvestmentControllerConstructorTest is ReinvestmentControllerTestBase
     MockUSDC otherToken = new MockUSDC();
     MockHub otherHub = new MockHub(address(otherToken));
 
+    wallet.setTokenSupported(address(otherToken), true);
+    minter.setTokenSupported(address(otherToken), true);
+
     ReinvestmentController other = new ReinvestmentController(
       address(wallet),
       address(minter),
@@ -75,6 +79,44 @@ contract ReinvestmentControllerConstructorTest is ReinvestmentControllerTestBase
     minter.setDomain(1);
 
     vm.expectRevert(IReinvestmentController.InvalidDomain.selector);
+    new ReinvestmentController(address(wallet), address(minter), address(hub), address(usdc));
+  }
+
+  function test_constructor_revertsWith_InvalidGatewayConfiguration_sameAddress() public {
+    vm.expectRevert(IReinvestmentController.InvalidGatewayConfiguration.selector);
+    new ReinvestmentController(address(wallet), address(wallet), address(hub), address(usdc));
+  }
+
+  /// @dev The minter does not expose {domainSeparator}, so the probe reverts without data
+  function test_constructor_revertsWith_swappedGatewayAddresses() public {
+    vm.expectRevert();
+    new ReinvestmentController(address(minter), address(wallet), address(hub), address(usdc));
+  }
+
+  function test_constructor_revertsWith_InvalidGatewayConfiguration_walletWithoutDomainSeparator()
+    public
+  {
+    MockBadGatewayWallet badWallet = new MockBadGatewayWallet();
+
+    vm.expectRevert(IReinvestmentController.InvalidGatewayConfiguration.selector);
+    new ReinvestmentController(address(badWallet), address(minter), address(hub), address(usdc));
+  }
+
+  function test_constructor_revertsWith_InvalidGatewayConfiguration_walletTokenUnsupported()
+    public
+  {
+    wallet.setTokenSupported(address(usdc), false);
+
+    vm.expectRevert(IReinvestmentController.InvalidGatewayConfiguration.selector);
+    new ReinvestmentController(address(wallet), address(minter), address(hub), address(usdc));
+  }
+
+  function test_constructor_revertsWith_InvalidGatewayConfiguration_minterTokenUnsupported()
+    public
+  {
+    minter.setTokenSupported(address(usdc), false);
+
+    vm.expectRevert(IReinvestmentController.InvalidGatewayConfiguration.selector);
     new ReinvestmentController(address(wallet), address(minter), address(hub), address(usdc));
   }
 

@@ -13,4 +13,9 @@ interface IGatewayMinter {
   /// @notice Returns the Gateway domain this contract operates on
   /// @return The Gateway domain identifier
   function domain() external view returns (uint32);
+
+  /// @notice Whether the minter can mint a token
+  /// @param token The token to check
+  /// @return True when the token is supported
+  function isTokenSupported(address token) external view returns (bool);
 }

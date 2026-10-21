@@ -52,6 +52,15 @@ contract ReinvestmentControllerIsValidSignatureTest is ReinvestmentControllerTes
     assertEq(controller.isValidSignature(digest, signature), IERC1271.isValidSignature.selector);
   }
 
+  function test_isValidSignature_withFeeBelowTheConfiguredMaximum_atSweptLessMaxFee() public {
+    _setMaxFee(FEE);
+
+    bytes memory intent = _encodeBurnIntent(_defaultTransferSpec(INVESTED - FEE), FEE - 1);
+    (bytes32 digest, bytes memory signature) = _signBurnIntent(keeperPrivateKey, intent);
+
+    assertEq(controller.isValidSignature(digest, signature), IERC1271.isValidSignature.selector);
+  }
+
   function test_isValidSignature_signedByAdmin() public view {
     bytes memory intent = _encodeBurnIntent(_defaultTransferSpec(1_000e6));
     (bytes32 digest, bytes memory signature) = _signBurnIntent(adminPrivateKey, intent);
@@ -189,6 +198,20 @@ contract ReinvestmentControllerIsValidSignatureTest is ReinvestmentControllerTes
     _setMaxFee(FEE);
 
     bytes memory intent = _encodeBurnIntent(_defaultTransferSpec(INVESTED), 1);
+    (bytes32 digest, bytes memory signature) = _signBurnIntent(keeperPrivateKey, intent);
+
+    vm.expectRevert(IReinvestmentController.BurnIntentExceedsBalance.selector);
+    controller.isValidSignature(digest, signature);
+  }
+
+  /// @dev {divest} charges the configured fee, so an intent signed with a lower fee must still
+  /// leave room for it, or its attestation could never be consumed
+  function test_isValidSignature_revertsWith_BurnIntentExceedsBalance_intentFeeBelowMaxFee()
+    public
+  {
+    _setMaxFee(FEE);
+
+    bytes memory intent = _encodeBurnIntent(_defaultTransferSpec(INVESTED - FEE + 1), 0);
     (bytes32 digest, bytes memory signature) = _signBurnIntent(keeperPrivateKey, intent);
 
     vm.expectRevert(IReinvestmentController.BurnIntentExceedsBalance.selector);

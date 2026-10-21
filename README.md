@@ -51,6 +51,46 @@ proven by its own balance rather than by a balance coincidence at the Hub. It al
 `_validateTransferSpec` pinning depositor, recipient, signer and destination caller all to
 `self`, which is what makes the spec check easy to audit.
 
+## Dust
+
+Because of the fee accounting mentioned above, dust is left at the Gateway.
+The accounting matches holdings exactly while Circle's fee matches `maxFee`.
+Two things can push the Gateway balance above that: Circle charging less than the
+cap, or a third party calling `depositFor` on the controller. Either way
+the excess is real USDC the Hub has never counted, and no existing path can reach it.
+`divest` and `isValidSignature` both bound their intents by `swept`, so a burn intent
+for the surplus can never be attested, and `initiateWithdrawal` caps at `swept` by
+design. Once the Hub is fully divested and `swept` is zero, every exit is closed and
+the residue is stranded.
+
+`initiateDustWithdrawal` and `claimDust` reopen it through the on-chain exit, which
+needs no attestation and so is untouched by the `swept` bound in `isValidSignature`.
+The amount withdrawn is `available - swept`, never more, so principal is out of reach
+by construction: the pair only ever moves what sits above the Hub's claim, the same
+line `initiateWithdrawal` refuses to cross from the other side. Both require the
+controller to be paused, which freezes `swept` for the duration of the Gateway's
+withdrawal delay.
+
+The dust is forwarded to a recipient, not reclaimed to the Hub. `reclaim` is capped at
+`swept` and only trades the Hub's claim for cash — it moves `swept` into `liquidity`,
+leaving `totalAddedAssets` unchanged — so it can never reach the surplus and would
+immediately recreate it. Residue that was never principal does not re-enter Hub
+accounting. This way treasury can reclaim the excess fees it paid if it is the recipient.
+
+`available - swept` only measures surplus once every burn has settled. `divest` lowers
+`swept` as soon as it mints, while the Gateway balance drops minutes later when Circle
+burns, so between those two points the difference is money already owed rather than
+dust. `initiateDustWithdrawal` cannot tell the two apart and would queue the pending
+burn's amount, so it should only be called once `available` has settled at `swept` plus
+whatever was donated.
+
+`claimDust` is what makes that safe: after the Gateway pays out, it requires
+`available >= swept`, so dust can only leave while the Hub's claim stays fully backed.
+If a burn lands against a queued amount, the claim reverts and the funds stay in the
+Gateway's withdrawing balance, where `withdraw` returns them to the Hub and squares the
+books. Any genuine dust is still reachable afterwards through a fresh
+`initiateDustWithdrawal`.
+
 ## Trust assumptions
 
 The Gateway is Circle's. We depend on them for:

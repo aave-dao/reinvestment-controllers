@@ -273,4 +273,83 @@ contract ReinvestmentControllerInvestTest is ReinvestmentControllerTestBase {
     vm.prank(keeper);
     controller.invest(1);
   }
+
+  function test_invest_sandwichExceedsBpsCap() public {
+    // At SUPPLIED the BPS cap is the binding limit; abs is set above it so it only
+    // binds once supply is inflated.
+    uint256 bpsCap = INVESTABLE; // BPS-bound at base supply per the fixture
+    uint256 absCap = 900_000e6;
+
+    vm.prank(admin);
+    controller.setExposureCapAbs(absCap);
+
+    assertEq(controller.getInvestableAmount(), bpsCap);
+
+    uint256 sandwich = SUPPLIED * 10;
+    hub.add(sandwich);
+
+    assertEq(controller.getInvestableAmount(), absCap);
+
+    vm.prank(keeper);
+    controller.invest(absCap);
+
+    hub.remove(sandwich);
+
+    assertEq(hub.getAddedAssets(assetId), SUPPLIED);
+    assertEq(hub.getAssetLiquidity(assetId), SUPPLIED - absCap);
+    assertEq(usdc.balanceOf(address(hub)), SUPPLIED - absCap);
+    assertEq(hub.getAssetSwept(assetId), absCap);
+    assertGt(hub.getAssetSwept(assetId), bpsCap);
+    assertEq(controller.getInvestableAmount(), 0);
+  }
+
+  function test_invest_sandwichLocksAttackerFundsWhenSweepExceedsSupply() public {
+    // Abs cap above the base supply: a sweep at the cap must draw on the sandwiched
+    // deposit itself, since base supply alone cannot cover it.
+    uint256 absCap = 1_600_000e6;
+
+    vm.prank(admin);
+    controller.setExposureCapAbs(absCap);
+
+    assertGt(absCap, SUPPLIED);
+
+    // Front-run: inflate supply so the cap becomes reachable.
+    uint256 sandwich = SUPPLIED * 10;
+    hub.add(sandwich);
+
+    vm.prank(keeper);
+    controller.invest(absCap);
+
+    // Back-run: the attacker cannot recover the full deposit. The keeper swept part of
+    // it into the Gateway, and that portion stays locked as exposure until divested.
+    uint256 liquid = hub.getAssetLiquidity(assetId);
+    uint256 locked = absCap - SUPPLIED;
+
+    assertEq(liquid, SUPPLIED + sandwich - absCap);
+    assertEq(sandwich - liquid, locked);
+
+    vm.expectRevert(abi.encodeWithSelector(MockHub.InsufficientLiquidity.selector, liquid));
+    hub.remove(sandwich);
+
+    hub.remove(liquid);
+
+    assertEq(hub.getAssetLiquidity(assetId), 0);
+    assertEq(hub.getAddedAssets(assetId), SUPPLIED + sandwich - liquid);
+    assertEq(hub.getAssetSwept(assetId), absCap);
+    assertEq(wallet.availableBalance(address(usdc), address(controller)), absCap);
+    assertEq(controller.getInvestableAmount(), 0);
+  }
+
+  function test_invest_revertsWith_ExposureCapExceeded_sandwichCannotExceedAbsCap() public {
+    uint256 absCap = 400_000e6;
+
+    vm.prank(admin);
+    controller.setExposureCapAbs(absCap);
+
+    hub.add(SUPPLIED * 10);
+
+    vm.expectRevert(IReinvestmentController.ExposureCapExceeded.selector);
+    vm.prank(keeper);
+    controller.invest(absCap + 1);
+  }
 }

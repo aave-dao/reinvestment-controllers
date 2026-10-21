@@ -48,7 +48,8 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// @dev Invalid mint amount provided in attestation
   error InvalidMintAmount();
 
-  /// @dev Invalid recipient provided in transfer specification
+  /// @dev Invalid recipient provided in transfer specification, or a {claimDust} recipient
+  /// without DEFAULT_ADMIN_ROLE
   error InvalidRecipient();
 
   /// @dev Signer does not have KEEPER_ROLE to sign transaction
@@ -78,11 +79,29 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// @dev Amount to be deposited cannot exceed the configured exposure caps
   error ExposureCapExceeded();
 
+  /// @notice Thrown when there is no Gateway balance in excess of the swept amount
+  error NoDust();
+
+  /// @dev No dust withdrawal is pending; the queued withdrawal, if any, is principal
+  error NoDustWithdrawalInProcess();
+
+  /// @dev Paying out would leave the Hub's swept balance unbacked at the Gateway
+  error SweptNotBacked();
+
   /// @dev No pending on-chain withdrawal
   error NoWithdrawalInProcess();
 
   /// @dev An existing withdrawal is already in process
   error WithdrawalInProcess();
+
+  /// @dev Emitted when dust is recovered from Gateway
+  /// @param recipient Address receiving the dust
+  /// @param amount The amount of dust transferred
+  event ClaimedDust(address indexed recipient, uint256 amount);
+
+  /// @notice Emitted when a dust withdrawal is initiated at the Gateway
+  /// @param amount The amount of dust being withdrawn
+  event DustWithdrawalInitiated(uint256 amount);
 
   /// @dev Emitted when funds are invested
   /// @param amount The amount of funds invested
@@ -156,11 +175,10 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   function invest(uint256 amount) external;
 
   /// @notice Divests amount of funds from USDC Gateway
-  /// @dev Bounded by the swept balance less {maxFee}, which is what a full exit divests. An intent
-  /// for more than that can still pass {isValidSignature} when its own `maxFee` is lower than the
-  /// configured one, but {divest} always charges the configured fee, so such an attestation cannot
-  /// be used. Circle caps attestation size off-chain, and the Gateway contracts impose no on-chain
-  /// limit.
+  /// @dev Bounded by the swept balance less {maxFee}, which is what a full exit divests.
+  /// {isValidSignature} applies the same bound with the configured {maxFee} rather than the
+  /// intent's own, so every intent it accepts yields an attestation {divest} can consume. Circle
+  /// caps attestation size off-chain, and the Gateway contracts impose no on-chain limit.
   /// @dev The attestation names this contract as recipient, so the mint lands here and is then
   /// transferred on to the Hub, rather than naming the Hub directly and letting {reclaim} find
   /// the funds already there. {reclaim} only requires the Hub's aggregate balance to cover the
@@ -201,6 +219,27 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// the implementation sits behind a proxy, so a state this code cannot resolve can be addressed
   /// by upgrading it
   function withdraw() external;
+
+  /// @notice Initiates a claim on dust held on the Gateway
+  /// As the contract potentially overpays fees if they are lower than max fee, a certain amount accumulates on the
+  /// Gateway that can only be claimed by this function, as the other paths use the HUB.reclaim() functionality and
+  /// check the accounting against that balance.
+  /// @dev Sizes the withdrawal as `available - swept`, which measures surplus only once every burn
+  /// has settled. {divest} lowers `swept` when it mints, while the Gateway balance drops later when
+  /// Circle burns, so in between the difference is money already owed and this queues too much.
+  /// {claimDust} refuses to pay that out, and {withdraw} returns it to the Hub
+  function initiateDustWithdrawal() external;
+
+  /// @notice Completes a pending dust withdrawal and forwards it to `recipient`. The dust is
+  /// not reclaimed to the Hub, as it was never counted as swept.
+  /// @dev Requires a dust withdrawal to be pending, so it cannot pay out one queued by
+  /// {initiateWithdrawal}, and requires the Gateway's available balance to still cover `swept`
+  /// afterwards, so a burn landing against the queued amount blocks the claim rather than
+  /// draining principal. Blocked funds stay in the Gateway and {withdraw} returns them to the Hub
+  /// @dev `recipient` must hold DEFAULT_ADMIN_ROLE, a sanity check against paying dust out to a
+  /// mistyped address
+  /// @param recipient The address to receive the dust
+  function claimDust(address recipient) external;
 
   /// @notice Halts {invest}, {divest} and {isValidSignature}
   /// @dev Blocking {isValidSignature} stops new burn intents from validating, and blocking {divest}
@@ -329,6 +368,12 @@ interface IReinvestmentController is IERC1271, IAccessControl {
   /// balance on top of the amount withdrawn
   /// @return The maximum fee (in absolute terms)
   function getMaxFee() external view returns (uint256);
+
+  /// @notice Returns the amount queued by {initiateDustWithdrawal} and not yet claimed
+  /// @dev Zero when no withdrawal is pending, and zero while a principal withdrawal is pending,
+  /// which is what {claimDust} checks to tell the two paths apart
+  /// @return The pending dust amount
+  function getPendingDust() external view returns (uint256);
 
   /// @notice Returns the exposure cap (in absolute terms)
   /// @dev Can be set to zero to sunset ReinvestmentController

@@ -1,0 +1,55 @@
+DIAGRAMS.md
+  s_97c267611d9531::t_90c6eaec955333 1-275
+README.md
+  s_684bdd6f95aee5::t_a124339a0c4c8c 54-93
+snapshots/ReinvestmentController.Operations.json
+  s_684bdd6f95aee5::t_d2a8ab868c20ee 2-9
+src/ReinvestmentController.sol
+  s_684bdd6f95aee5::t_a865b367302bb3 73-74,200,202,213,217-221,229-264,272,327-331,433-449,501,503,505
+src/interfaces/IReinvestmentController.sol
+  s_684bdd6f95aee5::t_a9fa8b68e35e38 51-52,82-90,97-105,178-181,223-243,372-377
+tests/ReinvestmentController.Base.t.sol
+  s_684bdd6f95aee5::t_b843a238c1389a 113-121
+tests/ReinvestmentController.ClaimDust.t.sol
+  s_97c267611d9531::t_0a87bb71a139aa 1-255
+tests/ReinvestmentController.Fork.t.sol
+  s_684bdd6f95aee5::t_808fd26f9c2199 204
+tests/ReinvestmentController.ForkTee.t.sol
+  s_684bdd6f95aee5::t_9a7def91a59c8d 284-326
+tests/ReinvestmentController.InitiateDustWithdrawal.t.sol
+  s_97c267611d9531::t_92514b84d644ce 1-181
+tests/ReinvestmentController.Invest.t.sol
+  s_684bdd6f95aee5::t_78240f8135ce69 276-354
+tests/ReinvestmentController.IsValidSignature.t.sol
+  s_684bdd6f95aee5::t_cb0e662e1b36dd 55-63,207-220
+tests/ReinvestmentController.Storage.t.sol
+  s_684bdd6f95aee5::t_907cfc010e2a29 16,32-36,44
+tests/mocks/MockHub.sol
+  s_684bdd6f95aee5::t_0868b7b245e1d3 91-98
+tests/mocks/MockUSDC.sol
+  s_684bdd6f95aee5::t_64fa76a6aafb7c 16-19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "335ab641879bc403f98500dd8b728a0246284fd1",
+  "prompts": {},
+  "sessions": {
+    "s_684bdd6f95aee5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "93103f22-ffa2-4ee9-b1f6-f0750459b90d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "AlbertoCentonze <11707683+AlbertoCentonze@users.noreply.github.com>"
+    },
+    "s_97c267611d9531": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0d529510-653d-4ac9-b03c-9186de5e51bf",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "AlbertoCentonze <11707683+AlbertoCentonze@users.noreply.github.com>"
+    }
+  }
+}

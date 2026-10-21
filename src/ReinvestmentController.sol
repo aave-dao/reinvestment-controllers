@@ -70,6 +70,8 @@ contract ReinvestmentController is
     uint256 exposureCapBps;
     /// @dev Maximum fee payable to the Gateway operator on a withdrawal (in absolute terms)
     uint256 maxFee;
+    /// @dev Amount queued by {initiateDustWithdrawal}, zero when the pending withdrawal is principal
+    uint256 pendingDust;
   }
 
   /// @dev The storage slot for the ReinvestmentController storage struct.
@@ -195,14 +197,9 @@ contract ReinvestmentController is
 
   /// @inheritdoc IReinvestmentController
   function initiateWithdrawal() external onlyRole(DEFAULT_ADMIN_ROLE) whenPaused {
-    require(
-      GATEWAY_WALLET.withdrawingBalance(address(USDC), address(this)) == 0,
-      WithdrawalInProcess()
-    );
+    _requireNoPendingWithdrawal();
 
-    uint256 swept = HUB.getAssetSwept(ASSET_ID);
-    uint256 available = GATEWAY_WALLET.availableBalance(address(USDC), address(this));
-    uint256 amount = Math.min(available, swept);
+    uint256 amount = Math.min(_availableBalance(), HUB.getAssetSwept(ASSET_ID));
 
     require(amount > 0, InvalidAmount());
 
@@ -213,9 +210,14 @@ contract ReinvestmentController is
 
   /// @inheritdoc IReinvestmentController
   function withdraw() external onlyRole(DEFAULT_ADMIN_ROLE) {
-    uint256 amount = GATEWAY_WALLET.withdrawingBalance(address(USDC), address(this));
+    uint256 amount = _withdrawingBalance();
 
     require(amount > 0, NoWithdrawalInProcess());
+
+    ReinvestmentControllerStorage storage $ = _getReinvestmentControllerStorage();
+    if ($.pendingDust > 0) {
+      $.pendingDust = 0;
+    }
 
     GATEWAY_WALLET.withdraw(address(USDC));
     USDC.safeTransfer(address(HUB), amount);
@@ -225,16 +227,49 @@ contract ReinvestmentController is
   }
 
   /// @inheritdoc IReinvestmentController
+  function initiateDustWithdrawal() external onlyRole(DEFAULT_ADMIN_ROLE) whenPaused {
+    _requireNoPendingWithdrawal();
+
+    uint256 dust = Math.saturatingSub(_availableBalance(), HUB.getAssetSwept(ASSET_ID));
+
+    require(dust > 0, NoDust());
+
+    _getReinvestmentControllerStorage().pendingDust = dust;
+
+    GATEWAY_WALLET.initiateWithdrawal(address(USDC), dust);
+
+    emit DustWithdrawalInitiated(dust);
+  }
+
+  /// @inheritdoc IReinvestmentController
+  function claimDust(address recipient) external onlyRole(DEFAULT_ADMIN_ROLE) whenPaused {
+    require(recipient != address(0), InvalidZeroAddress());
+    require(hasRole(DEFAULT_ADMIN_ROLE, recipient), InvalidRecipient());
+
+    ReinvestmentControllerStorage storage $ = _getReinvestmentControllerStorage();
+
+    require($.pendingDust > 0, NoDustWithdrawalInProcess());
+
+    uint256 amount = _withdrawingBalance();
+    $.pendingDust = 0;
+
+    GATEWAY_WALLET.withdraw(address(USDC));
+
+    require(_availableBalance() >= HUB.getAssetSwept(ASSET_ID), SweptNotBacked());
+
+    USDC.safeTransfer(recipient, amount);
+
+    emit ClaimedDust(recipient, amount);
+  }
+
+  /// @inheritdoc IReinvestmentController
   function pause() external onlyRole(PAUSER_ROLE) {
     _pause();
   }
 
   /// @inheritdoc IReinvestmentController
   function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
-    require(
-      GATEWAY_WALLET.withdrawingBalance(address(USDC), address(this)) == 0,
-      WithdrawalInProcess()
-    );
+    require(_withdrawingBalance() == 0, WithdrawalInProcess());
 
     _unpause();
   }
@@ -287,6 +322,11 @@ contract ReinvestmentController is
   /// @inheritdoc IReinvestmentController
   function getMaxFee() external view returns (uint256) {
     return _getReinvestmentControllerStorage().maxFee;
+  }
+
+  /// @inheritdoc IReinvestmentController
+  function getPendingDust() external view returns (uint256) {
+    return _getReinvestmentControllerStorage().pendingDust;
   }
 
   /// @inheritdoc IReinvestmentController
@@ -390,6 +430,23 @@ contract ReinvestmentController is
     emit SetExposureCapBps(oldExposureCapBps, newExposureCapBps);
   }
 
+  /// @dev Refuses to stack a withdrawal on top of another. Checked before either path (dust/withdraw)
+  /// sizes its amount, as a pending withdrawal leaves the available balance empty and would otherwise
+  /// surface as an empty-amount error instead
+  function _requireNoPendingWithdrawal() internal view {
+    require(_withdrawingBalance() == 0, WithdrawalInProcess());
+  }
+
+  /// @dev The Gateway balance still backing the Hub's swept amount
+  function _availableBalance() internal view returns (uint256) {
+    return GATEWAY_WALLET.availableBalance(address(USDC), address(this));
+  }
+
+  /// @dev The Gateway balance reserved by an in-progress withdrawal
+  function _withdrawingBalance() internal view returns (uint256) {
+    return GATEWAY_WALLET.withdrawingBalance(address(USDC), address(this));
+  }
+
   /// @dev Calculates the amount currently available to invest
   function _getInvestableAmount() internal view returns (uint256) {
     uint256 supplied = HUB.getAddedAssets(ASSET_ID);
@@ -441,13 +498,11 @@ contract ReinvestmentController is
     bytes29 spec = BurnIntentLib.getTransferSpec(intent);
     _validateTransferSpec(address(USDC), spec);
 
+    uint256 maxFee = _getReinvestmentControllerStorage().maxFee;
     uint256 intentMaxFee = BurnIntentLib.getMaxFee(intent);
-    require(intentMaxFee <= _getReinvestmentControllerStorage().maxFee, MaxFeeExceeded());
+    require(intentMaxFee <= maxFee, MaxFeeExceeded());
 
-    require(
-      spec.getValue() + intentMaxFee <= HUB.getAssetSwept(ASSET_ID),
-      BurnIntentExceedsBalance()
-    );
+    require(spec.getValue() + maxFee <= HUB.getAssetSwept(ASSET_ID), BurnIntentExceedsBalance());
   }
 
   /// @dev Validates the parameters of a withdrawal (BurnIntent)

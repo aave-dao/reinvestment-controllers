@@ -1,0 +1,14 @@
+{
+  "name": "reinvestment-v4",
+  "version": "0.1.0",
+  "private": true,
+  "license": "LicenseRef-BUSL",
+  "scripts": {
+    "lint": "prettier . --check",
+    "lint:fix": "prettier . --write"
+  },
+  "devDependencies": {
+    "prettier": "3.7.4",
+    "prettier-plugin-solidity": "2.2.1"
+  }
+}

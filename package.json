@@ -3,12 +3,26 @@
   "version": "0.1.0",
   "private": true,
   "license": "LicenseRef-BUSL",
+  "type": "module",
   "scripts": {
     "lint": "prettier . --check",
-    "lint:fix": "prettier . --write"
+    "lint:fix": "prettier . --write",
+    "keeper:start": "tsx offchain/src/index.ts",
+    "keeper:typecheck": "tsc -p offchain",
+    "keeper:test": "vitest run --root offchain"
+  },
+  "dependencies": {
+    "@aws-sdk/client-kms": "3.1148.0",
+    "@google-cloud/kms": "6.2.1",
+    "viem": "2.57.4",
+    "zod": "4.6.5"
   },
   "devDependencies": {
+    "@types/node": "26.6.4",
     "prettier": "3.7.4",
-    "prettier-plugin-solidity": "2.2.1"
+    "prettier-plugin-solidity": "2.2.1",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
   }
 }

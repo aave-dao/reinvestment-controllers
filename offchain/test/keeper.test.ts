@@ -123,6 +123,39 @@ describe('planDivest', () => {
     );
     expect(planDivest(balancedState({idle: 0n, swept: MAX_FEE}), config)).toBe(0n);
   });
+
+  describe('with a divest trigger below the liquid buffer', () => {
+    const triggered = {...config, DIVEST_TRIGGER_BPS: 1_000n};
+
+    it('waits above the divest trigger even with a buffer shortfall', () => {
+      expect(planDivest(balancedState({idle: 15_000_000n * USDC}), triggered)).toBe(0n);
+    });
+
+    it('restores the full buffer once idle falls below the trigger', () => {
+      expect(
+        planDivest(balancedState({idle: 9_000_000n * USDC}), {
+          ...triggered,
+          MAX_DIVEST_AMOUNT: 20_000_000n * USDC,
+        }),
+      ).toBe(11_000_000n * USDC - MAX_FEE);
+    });
+
+    it('divests over-exposure without waiting for the trigger', () => {
+      expect(planDivest(balancedState({exposureCapAbs: 25_000_000n * USDC}), triggered)).toBe(
+        5_000_000n * USDC - MAX_FEE,
+      );
+    });
+  });
+
+  it('clamps a trigger above the liquid buffer to it', () => {
+    expect(
+      planDivest(balancedState({idle: 19_000_000n * USDC}), {
+        ...config,
+        DIVEST_TRIGGER_BPS: 3_000n,
+      }),
+    ).toBe(1_000_000n * USDC - MAX_FEE);
+    expect(planDivest(balancedState(), {...config, DIVEST_TRIGGER_BPS: 3_000n})).toBe(0n);
+  });
 });
 
 describe('planInvest', () => {

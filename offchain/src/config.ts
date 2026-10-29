@@ -32,6 +32,7 @@ const baseSchema = z
     INVEST_HAIRCUT_BPS: z.coerce.bigint().nonnegative().max(10_000n).default(10n),
     MIN_DIVEST_AMOUNT: z.coerce.bigint().positive(),
     MAX_DIVEST_AMOUNT: z.coerce.bigint().positive().default(10_000_000_000_000n),
+    DIVEST_TRIGGER_BPS: z.coerce.bigint().positive().max(10_000n).optional(),
     BURN_INTENT_VALIDITY_BLOCKS: z.coerce.bigint().positive().default(7_200n),
   })
   .transform((config) => ({

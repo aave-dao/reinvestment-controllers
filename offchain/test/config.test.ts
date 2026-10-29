@@ -81,4 +81,14 @@ describe('loadConfig', () => {
   it('rejects a haircut above 100%', () => {
     expect(() => loadConfig({...env, INVEST_HAIRCUT_BPS: '10001'})).toThrow();
   });
+
+  it('parses the divest trigger', () => {
+    expect(loadConfig({...env, DIVEST_TRIGGER_BPS: '525'}).DIVEST_TRIGGER_BPS).toBe(525n);
+  });
+
+  it('rejects a zero or out-of-range divest trigger', () => {
+    expect(() => loadConfig({...env, DIVEST_TRIGGER_BPS: '0'})).toThrow();
+    expect(() => loadConfig({...env, DIVEST_TRIGGER_BPS: ''})).toThrow();
+    expect(() => loadConfig({...env, DIVEST_TRIGGER_BPS: '10001'})).toThrow();
+  });
 });

@@ -66,27 +66,34 @@ export type TickResult =
 const min = (...values: bigint[]) => values.reduce((a, b) => (b < a ? b : a));
 const max = (...values: bigint[]) => values.reduce((a, b) => (b > a ? b : a));
 const saturatingSub = (a: bigint, b: bigint) => (a > b ? a - b : 0n);
+const percentMulUp = (value: bigint, bps: bigint) =>
+  (value * bps + PERCENTAGE_FACTOR - 1n) / PERCENTAGE_FACTOR;
+
+const getExposureCap = (state: KeeperState) =>
+  min(state.exposureCapAbs, (state.supplied * state.exposureCapBps) / PERCENTAGE_FACTOR);
 
 /** Amount that must return to the Hub to restore the liquid buffer and respect the exposure cap */
 export function getShortfall(state: KeeperState): bigint {
-  const bufferProduct = state.supplied * state.liquidBufferBps;
-  const buffer =
-    bufferProduct / PERCENTAGE_FACTOR + (bufferProduct % PERCENTAGE_FACTOR > 0n ? 1n : 0n);
-  const cap = min(
-    state.exposureCapAbs,
-    (state.supplied * state.exposureCapBps) / PERCENTAGE_FACTOR,
+  return max(
+    saturatingSub(percentMulUp(state.supplied, state.liquidBufferBps), state.idle),
+    saturatingSub(state.swept, getExposureCap(state)),
   );
-  return max(saturatingSub(buffer, state.idle), saturatingSub(state.swept, cap));
 }
 
 /**
- * Sizes the next divest, whose `amount + maxFee` returns to the Hub, capped per transfer.
- * Returns 0 when nothing should be divested
+ * Sizes the next divest, whose `amount + maxFee` returns to the Hub, capped per transfer. Waits
+ * until idle falls below the divest trigger, then restores the full liquid buffer, so withdrawals
+ * right after a recall don't each start another. Over-exposure divests without waiting. A trigger
+ * above the liquid buffer is clamped to it. Returns 0 when nothing should be divested
  */
 export function planDivest(
   state: KeeperState,
-  config: Pick<Config, 'MIN_DIVEST_AMOUNT' | 'MAX_DIVEST_AMOUNT'>,
+  config: Pick<Config, 'MIN_DIVEST_AMOUNT' | 'MAX_DIVEST_AMOUNT' | 'DIVEST_TRIGGER_BPS'>,
 ): bigint {
+  const triggerBps = min(config.DIVEST_TRIGGER_BPS ?? state.liquidBufferBps, state.liquidBufferBps);
+  const overExposed = state.swept > getExposureCap(state);
+  if (!overExposed && state.idle >= percentMulUp(state.supplied, triggerBps)) return 0n;
+
   const shortfall = getShortfall(state);
   if (shortfall === 0n || shortfall < config.MIN_DIVEST_AMOUNT) return 0n;
 

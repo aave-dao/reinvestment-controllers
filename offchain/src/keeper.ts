@@ -161,20 +161,25 @@ export async function readState(ctx: KeeperContext): Promise<KeeperState> {
   };
 }
 
-/** Runs one keeper step: settles a pending divest, starts a new one, or invests */
+/**
+ * Runs one keeper step: settles a pending divest, starts a new one, or invests. Only an attested
+ * divest proceeds while the Gateway balance is unsettled, since its attestation expires
+ */
 export async function tick(ctx: KeeperContext): Promise<TickResult> {
   const state = await readState(ctx);
   if (state.paused) return 'paused';
 
-  if (!ctx.pending) {
-    const amount = planDivest(state, ctx.config);
-    if (amount > 0n) {
-      if (!(await isAttestable(ctx, amount + state.maxFee))) return 'awaiting-balance';
-      ctx.pending = await createPendingDivest(ctx, state, amount);
-    }
-  } else if (!ctx.pending.attestation) {
-    const {burnIntent} = ctx.pending;
-    if (!(await isAttestable(ctx, burnIntent.spec.value + burnIntent.maxFee))) {
+  if (!ctx.pending?.attestation) {
+    const balance = await getSettledGatewayBalance(ctx);
+    if (balance === undefined) return 'awaiting-balance';
+
+    if (!ctx.pending) {
+      const amount = planDivest(state, ctx.config);
+      if (amount > 0n) {
+        if (balance < amount + state.maxFee) return 'awaiting-balance';
+        ctx.pending = await createPendingDivest(ctx, state, amount);
+      }
+    } else if (balance < ctx.pending.burnIntent.spec.value + ctx.pending.burnIntent.maxFee) {
       return 'awaiting-balance';
     }
   }
@@ -195,16 +200,26 @@ export async function tick(ctx: KeeperContext): Promise<TickResult> {
 }
 
 /**
- * Whether Circle has indexed enough of the controller's Gateway balance to attest `total`, so no
- * intent is signed or submitted while the deposit is still awaiting finality
+ * The controller's Gateway balance, or undefined while Circle and the finalized chain disagree on
+ * it. Circle counts only finalized blocks and nets out balance reserved by an attestation until
+ * its burn lands or it expires, so a mismatch means a transfer is in flight
  */
-async function isAttestable(ctx: KeeperContext, total: bigint): Promise<boolean> {
-  const balance = await getGatewayBalance(
-    ctx.config.CIRCLE_GATEWAY_API_URL,
-    ctx.deployment.domain,
-    ctx.deployment.controller,
-  );
-  return balance >= total;
+async function getSettledGatewayBalance(ctx: KeeperContext): Promise<bigint | undefined> {
+  const [indexed, onchain] = await Promise.all([
+    getGatewayBalance(
+      ctx.config.CIRCLE_GATEWAY_API_URL,
+      ctx.deployment.domain,
+      ctx.deployment.controller,
+    ),
+    ctx.publicClient.readContract({
+      address: ctx.deployment.gatewayWallet,
+      abi: gatewayWalletAbi,
+      functionName: 'availableBalance',
+      args: [ctx.deployment.usdc, ctx.deployment.controller],
+      blockTag: 'finalized',
+    }),
+  ]);
+  return indexed === onchain ? indexed : undefined;
 }
 
 async function createPendingDivest(

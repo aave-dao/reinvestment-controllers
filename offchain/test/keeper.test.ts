@@ -162,13 +162,17 @@ describe('tick', () => {
 
   let state: KeeperState;
   let writes: {functionName: string; args: readonly unknown[]}[];
+  let reads: {functionName: string; args?: readonly unknown[]; blockTag?: string}[];
   let fee: {balance: bigint; allowance: bigint};
+  let gateway: {onchain: bigint};
   let ctx: KeeperContext;
 
   beforeEach(() => {
     state = balancedState();
     writes = [];
+    reads = [];
     fee = {balance: 10n * USDC, allowance: 10n * USDC};
+    gateway = {onchain: state.swept};
     vi.mocked(requestAttestation).mockReset().mockResolvedValue(attestation);
     vi.mocked(getGatewayBalance).mockReset().mockResolvedValue(state.swept);
 
@@ -185,13 +189,21 @@ describe('tick', () => {
       getLastInvestTimestamp: () => state.lastInvestTimestamp,
       getInvestMinDelay: () => state.investMinDelay,
       withdrawalDelay: () => 100n,
+      availableBalance: () => gateway.onchain,
       balanceOf: () => fee.balance,
       allowance: () => fee.allowance,
     };
 
     const publicClient = {
       getBlock: async () => ({number: state.blockNumber, timestamp: state.timestamp}),
-      readContract: async ({functionName}: {functionName: string}) => views[functionName]!(),
+      readContract: async (read: {
+        functionName: string;
+        args?: readonly unknown[];
+        blockTag?: string;
+      }) => {
+        reads.push({functionName: read.functionName, args: read.args, blockTag: read.blockTag});
+        return views[read.functionName]!();
+      },
       simulateContract: async (request: {functionName: string; args: readonly unknown[]}) => ({
         request,
       }),
@@ -299,9 +311,53 @@ describe('tick', () => {
   it('waits when Circle has indexed less than the amount plus the fee', async () => {
     state = balancedState({idle: 15_000_000n * USDC});
     vi.mocked(getGatewayBalance).mockResolvedValue(5_000_000n * USDC - 1n);
+    gateway.onchain = 5_000_000n * USDC - 1n;
 
     expect(await tick(ctx)).toBe('awaiting-balance');
     expect(requestAttestation).not.toHaveBeenCalled();
+  });
+
+  it('waits while Circle and the finalized chain disagree on the balance', async () => {
+    state = balancedState({idle: 15_000_000n * USDC});
+    vi.mocked(getGatewayBalance).mockResolvedValue(state.swept - 5_000_000n * USDC);
+
+    expect(await tick(ctx)).toBe('awaiting-balance');
+    expect(ctx.pending).toBeUndefined();
+    expect(requestAttestation).not.toHaveBeenCalled();
+    expect(writes).toEqual([]);
+  });
+
+  it('does not invest while the balance is unsettled', async () => {
+    state = balancedState({investableAmount: 500_000n * USDC});
+    gateway.onchain = state.swept + 500_000n * USDC;
+
+    expect(await tick(ctx)).toBe('awaiting-balance');
+    expect(writes).toEqual([]);
+  });
+
+  it('reads the on-chain balance at the finalized block', async () => {
+    await tick(ctx);
+    expect(reads).toContainEqual({
+      functionName: 'availableBalance',
+      args: [deployment.usdc, deployment.controller],
+      blockTag: 'finalized',
+    });
+  });
+
+  it('settles an attested divest while the balance is unsettled', async () => {
+    state = balancedState({idle: 15_000_000n * USDC});
+    const simulateContract = ctx.publicClient.simulateContract;
+    ctx.publicClient.simulateContract = (async () => {
+      throw new Error('rpc down');
+    }) as unknown as PublicClient['simulateContract'];
+    await expect(tick(ctx)).rejects.toThrow('rpc down');
+    expect(ctx.pending?.attestation).toEqual(attestation);
+
+    ctx.publicClient.simulateContract = simulateContract;
+    vi.mocked(getGatewayBalance).mockResolvedValue(state.swept - 5_000_000n * USDC);
+    expect(await tick(ctx)).toBe('divested');
+    expect(requestAttestation).toHaveBeenCalledTimes(1);
+    expect(writes).toHaveLength(1);
   });
 
   it('holds an unattested divest until Circle has indexed the balance', async () => {
